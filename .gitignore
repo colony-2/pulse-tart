@@ -1,0 +1,9 @@
+/dist/
+/.local/
+/result
+/result-*
+*.test
+
+# Generated test reports and archives.
+/test-results/
+/tart-debug-*.log

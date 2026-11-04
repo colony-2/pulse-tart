@@ -1,0 +1,49 @@
+{
+  "nodes": {
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1791883866,
+        "narHash": "sha256-yvkDdToRZ4IgPc9tSBzzCYJvTLf8n5eE3rgUkpCuD5A=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "c2j": "c2j"
+      }
+    },
+    "c2j": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1793579529,
+        "narHash": "sha256-jgDxSVZqbJot2yn+o1t3qYdjo5ev/oqe3YnoHwwCzps=",
+        "owner": "colony-2",
+        "repo": "c2j",
+        "rev": "bcb70400836de1d073e20585b18bd45b91b289ac",
+        "type": "github"
+      },
+      "original": {
+        "owner": "colony-2",
+        "repo": "c2j",
+        "rev": "bcb70400836de1d073e20585b18bd45b91b289ac",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

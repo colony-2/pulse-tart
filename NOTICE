@@ -1,0 +1,9 @@
+pulse-tart implementation: Copyright 2026 pulse-tart contributors.
+Licensed under FSL-1.1-ALv2.
+
+The public contract comes from github.com/colony-2/pulse-provider-api.
+Orchard is accessed through its REST API; direct Tart uses its installed CLI.
+The guest fixture uses public c2j/JobDB packages. Upstream copyrights and licenses
+remain with their authors. Guest bootstrap installs separately licensed Nix,
+c2j, and nixpkgs packages, which retain notices in their closures.
+The Nix installer is downloaded from DeterminateSystems, not redistributed here.

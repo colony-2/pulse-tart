@@ -1,0 +1,209 @@
+{
+  "validation_date": "2026-11-04",
+  "status": "in-process cell API; Orchard and direct Tart full suites and real JobDB execution passed",
+  "provider": {
+    "module": "github.com/colony-2/pulse-tart",
+    "api": "github.com/colony-2/pulse-provider-api",
+    "api_commit": "9991fd574083fa1580bc1596efdf7bd214240bdb",
+    "interface": "Provider.Submit / Provider.List",
+    "configuration": "shared typed Config plus OrchardConfig or TartConfig"
+  },
+  "guest": {
+    "platform": "darwin/arm64",
+    "macos": "15.7.7",
+    "build": "24G720",
+    "image": "ghcr.io/cirruslabs/macos-sequoia-base@sha256:eee659985b01e4df2a6c0754bd8d25e54969933c43fdcd4edef8bea337b3d354"
+  },
+  "nix": {
+    "version": "2.35.4",
+    "installer": "DeterminateSystems/nix-installer v3.24.1 --prefer-upstream-nix",
+    "installer_sha256": "34199f983d1a08e76a4fb33b28691faa637fc4a8677b4de20bd951126e1bdada",
+    "nixpkgs": "a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf",
+    "c2j_darwin_vendor_hash": "sha256-FVCG5U8OH5ETRifG0MrhxZXxq4BVIlAjub91401+oAE="
+  },
+  "c2j": {
+    "commit": "bcb70400836de1d073e20585b18bd45b91b289ac"
+  },
+  "orchard": {
+    "version": "unknown",
+    "commit": "unknown",
+    "capabilities": [
+      "rpc-v1",
+      "vm-state-endpoint"
+    ],
+    "worker_tart_version": "not exposed by controller API; not independently measured",
+    "note": "User-updated build; version and commit reported as unknown. Suspended cloning and two-slot concurrent execution validated."
+  },
+  "defaults": {
+    "cpu": 4,
+    "memory_mib": 8192
+  },
+  "validation": {
+    "deterministic": "Passed: Go race tests, vet, Linux amd64 and macOS arm64 cross-builds, API/slot/journal tests, byte-exact lease stdin, HTTP boundaries, direct Tart commands/ownership/detached processes and SSH delivery/cancellation",
+    "orchard_cell_api": {
+      "result": "passed",
+      "test": "TestLive",
+      "seconds": 389.23,
+      "template_preparation_seconds": 187.857,
+      "two_clone_handoff_and_exit_seconds": 20.13,
+      "checks": [
+        "two independent suspended templates",
+        "two concurrent clones",
+        "invalid-lease handoff and shutdown",
+        "library reopen during startup",
+        "duplicate suppression",
+        "overflow no_capacity",
+        "slot reuse",
+        "exact-identity cleanup",
+        "expected c2j failure marker verified",
+        "byte-preserving lease envelope",
+        "real JobDB completion through public Submit",
+        "Nix hello execution",
+        "lease-bound synthetic secret retrieval",
+        "renewal beyond initial lease lifetime",
+        "completed lease rejection without reacquisition",
+        "expired lease rejection without execution or reacquisition"
+      ],
+      "report": "test-results/20261103T220117Z-orchard-80288/summary.json",
+      "jobdb": {
+        "status": "COMPLETED",
+        "claims": 1,
+        "renewals_at_completion_check": 5,
+        "secret_calls": 1
+      }
+    },
+    "not_run": [
+      "hosted CI workflows",
+      "production TLS/roles",
+      "Orchard controller/worker restart fault injection"
+    ],
+    "direct_tart_lifecycle": {
+      "result": "passed",
+      "source": "tart-debug-20261103T213115Z.log",
+      "seconds": 202.08,
+      "template_preparation_seconds": 161.045,
+      "two_clone_handoff_and_exit_seconds": 18.703,
+      "host_macos": "26.7.2",
+      "tart_version": "2.41.1",
+      "limitation": "Historical invalid-lease lifecycle run; superseded by direct_tart_cell_api below."
+    },
+    "direct_tart_cell_api": {
+      "result": "passed",
+      "test": "TestLive",
+      "date": "2026-11-04",
+      "seconds": 368.12,
+      "template_preparation_seconds": 190.997,
+      "two_clone_handoff_and_exit_seconds": 18.642,
+      "jobdb_service_startup_seconds": 7,
+      "host_macos": "26.7.2",
+      "tart_version": "2.41.1",
+      "report": "test-results/20261104T001334Z-tart-77535/summary.json",
+      "checks": [
+        "two independent suspended templates",
+        "two concurrent clones",
+        "invalid-lease handoff and shutdown",
+        "library reopen during startup",
+        "duplicate suppression",
+        "overflow no_capacity",
+        "slot reuse",
+        "exact-identity cleanup",
+        "expected c2j failure marker verified",
+        "byte-preserving lease envelope",
+        "real JobDB completion through public Submit",
+        "Nix hello execution",
+        "lease-bound synthetic secret retrieval",
+        "renewal beyond initial lease lifetime",
+        "completed lease rejection without reacquisition",
+        "expired lease rejection without execution or reacquisition"
+      ],
+      "jobdb": {
+        "status": "COMPLETED",
+        "claims": 1,
+        "renewals_at_completion_check": 5,
+        "secret_calls": 1
+      },
+      "cleanup": "TestLive cleanup completed without errors; coordinator, job clones and templates removed."
+    }
+  },
+  "historical_measurements": {
+    "cached_image_boot": {
+      "date": "2026-11-02T03:39:43.372668+00:00",
+      "request_to_guest_startup_command_seconds": [
+        14.222,
+        13.188,
+        19.29
+      ],
+      "mean_seconds": 15.567,
+      "median_seconds": 14.222,
+      "cpu": 4,
+      "memory_mib": 8192,
+      "measurement": "Three sequential fresh VMs cloned from the cached base image, measured from POST initiation to first startup-command output observed through Orchard events; no Nix/c2j/bootstrap. One-second event polling.",
+      "cleanup": "All three exact VM API records removed and verified absent."
+    },
+    "prepared_fresh_clones": {
+      "date": "2026-11-03T02:53:43.318816+00:00",
+      "result": "passed",
+      "cpu": 4,
+      "memory_mib": 8192,
+      "request_to_worker_ready_seconds": [
+        16.288,
+        20.375,
+        16.309
+      ],
+      "mean_seconds": 17.657,
+      "median_seconds": 16.309,
+      "method": "Prepare one template, shut it down, then create three distinct Orchard VMs from its stopped worker-local Tart image. Each clone cold-boots and executes the normal provider startup/guest-runner path. No registry export/pull. One-second API event polling.",
+      "readiness": "The unprivileged process delivered through the normal guest runner successfully ran c2j version, pinged the Nix daemon, and wrote a unique readiness marker. All workers then completed successfully.",
+      "freshness": "Template was shut down before cloning; each sample had a distinct Orchard VM UID and macOS boot-session UUID. Prepared-profile cache hit verified in every clone.",
+      "cleanup": "All three clones and the template were deleted; API-record absence verified.",
+      "limitations": "Worker-local prepared template; no OCI registry export/import. Polling resolution approximately one second. Measures worker readiness, not a leased job completion."
+    },
+    "prepared_suspended_clones": {
+      "date": "2026-11-03T04:50:32.765231+00:00",
+      "result": "passed",
+      "controller_info": {
+        "version": "unknown",
+        "commit": "unknown",
+        "capabilities": [
+          "rpc-v1",
+          "vm-state-endpoint"
+        ]
+      },
+      "worker": "jnmac25.local",
+      "cpu": 4,
+      "memory_mib": 8192,
+      "bundle_sha256": "95b630152f1fc78b48b606cec7932fab0a68be691e2955403de1903f19a2b3b7",
+      "request_to_worker_ready_seconds": [
+        8.164,
+        8.143,
+        8.164
+      ],
+      "request_to_ssh_ready_seconds": [
+        7.149,
+        7.128,
+        7.149
+      ],
+      "mean_seconds": 8.157,
+      "median_seconds": 8.164,
+      "template_preparation_seconds": 138.998,
+      "template_suspend_seconds": 6.451,
+      "method": "Prepare one unused template, suspend it, then create three sequential distinct Orchard VMs from its worker-local saved state. Verify preserved boot UUID and process nonce/PID. Execute normal bootstrap/guest-runner path and c2j/Nix readiness probe. One-second event polling.",
+      "readiness": "Unprivileged supplied process ran c2j version, pinged the Nix daemon and wrote a unique marker. All three workers completed successfully and shut down.",
+      "freshness": "Three distinct VM UIDs; each resumed the untouched template boot UUID and resident canary nonce/PID. Prepared-environment cache hit verified.",
+      "cleanup": "Template and all three clones deleted; API-record absence verified.",
+      "limitations": "Template preparation/suspension excluded from readiness timing. Worker-local snapshot, one sequential clone at a time; no registry memory-state transfer. About one-second polling resolution. No leased job exercised. Historical cold-boot comparison used the previous Orchard build; not remeasured after update. Production provider support remains disabled."
+    }
+  },
+  "limits": [
+    "macOS ARM64 guests only",
+    "guest-local Nix stores",
+    "positive runtime caps, start-before and scratch reservations unsupported",
+    "one runtime per durable state directory and one host per owner/backend scope",
+    "legacy plugin journals must be drained before migration"
+  ],
+  "tart": {
+    "reviewed_source": "https://github.com/openai/tart",
+    "reviewed_commit": "bcc8084a22b1ab1cc7162626537d1c6cd794cdba",
+    "real_host_test": "Full race suite, lifecycle and real JobDB execution passed on user macOS host, 2026-11-04"
+  }
+}
