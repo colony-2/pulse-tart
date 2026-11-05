@@ -119,7 +119,9 @@ func run() error {
 		if strings.HasSuffix(r.URL.Path, "/lease") || r.URL.Path == "/v1/jobs/poll" {
 			claims.Add(1)
 		}
-		api.ServeHTTP(w, r)
+		// Administrative access is confined to this disposable loopback fixture.
+		authority := jobdb.CellAuthority{Principal: "fixture", TenantID: "orchard-test", Permissions: map[string]bool{"cells.create": true, "cells.get": true, "jobs.submit": true, "jobs.get": true, "jobs.list": true, "jobs.acquire": true}}
+		api.ServeHTTP(w, r.WithContext(jobdb.WithCellAuthority(r.Context(), authority)))
 	})
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go server.Serve(listener)
@@ -128,8 +130,20 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	if _, err = runtime.CreateCell(ctx, jobdb.CreateCellRequest{TenantID: "orchard-test", Name: "root", Repo: "fixture.invalid/pulse/repo"}); err != nil {
+		return err
+	}
+	// A normal c2j Git profile maps the canonical cell repository to the
+	// disposable server. No global Git configuration or credentials are needed.
+	profile := json.RawMessage(`{"version":1,"entries":[{"url":"http://127.0.0.1:18880/git/repo.git","rewrite_from":["https://fixture.invalid/pulse/repo.git"]}]}`)
+	if _, err = db.SetTenantConfigurationValue(ctx, jobdb.SetTenantConfigurationValueRequest{TenantID: "orchard-test", Name: "_c2j_git_profile_read", Value: profile}); err != nil {
+		return err
+	}
 	ops.Register(commandop.GetOp())
 	recipeText := `id: orchard-fixture
+execution:
+  base: macos-*arm64
+  capabilities: [nix, git]
 perms: {jobdb: {secrets: {resolve: [fixture]}}}
 op: command_execution
 inputs:
@@ -176,7 +190,7 @@ outputs:
 			json.NewEncoder(w).Encode(old)
 			return
 		}
-		job, e := starter.StartRecipeJob(ctx, workflowctl.StartJob{TenantId: "orchard-test", RecipeName: rec.GetMetadata().ID, GitRef: hash, JobContext: contextual.JobContext{Workflow: contextual.WorkflowContext{ProjectId: "orchard-test", CellName: "."}, GitBase: contextual.GitBaseContext{BaseRepo: endpoint + "/git/repo.git", BaseRef: hash, ResolvedBaseHash: hash}}}, jobdbschema.WorkflowEngine{Engine: engine, Registry: runtime}, *rec)
+		job, e := starter.StartRecipeJob(ctx, workflowctl.StartJob{TenantId: "orchard-test", Cell: "root", CellRepo: "fixture.invalid/pulse/repo", RecipeName: rec.GetMetadata().ID, GitRef: hash, JobContext: contextual.JobContext{Workflow: contextual.WorkflowContext{ProjectId: "orchard-test", CellName: "."}, GitBase: contextual.GitBaseContext{BaseRepo: "fixture.invalid/pulse/repo", BaseRef: hash, ResolvedBaseHash: hash}}}, jobdbschema.WorkflowEngine{Engine: engine, Registry: runtime}, *rec)
 		if e != nil {
 			http.Error(w, "fixture job creation failed", 500)
 			return

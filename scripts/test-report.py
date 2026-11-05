@@ -3,10 +3,41 @@
 import hashlib
 import json
 from pathlib import Path
+import stat
 import sys
 
 ROOT_PACKAGE = "github.com/colony-2/pulse-tart"
 MARKERS = ("JOBDB_VALID_PASS:", "JOBDB_REPLAY_PASS:", "JOBDB_EXPIRED_PASS:")
+
+
+def source_files(root):
+    files = list(root.glob("*.go")) + [root / p for p in ("go.mod", "go.sum", "flake.nix", "flake.lock")]
+    for directory in ("internal", "guest", "scripts", "tests"):
+        files.extend(p for p in (root / directory).rglob("*")
+                     if p.is_file() and "__pycache__" not in p.parts)
+    return sorted(files)
+
+
+def capture_source(root):
+    return {p.relative_to(root): (p.read_bytes(), stat.S_IMODE(p.stat().st_mode))
+            for p in source_files(root)}
+
+
+def snapshot(root, destination):
+    """Freeze test/build inputs, excluding runtime state and previous reports."""
+    captured = capture_source(root)
+    if captured != capture_source(root):
+        raise RuntimeError("Source changed while capturing the snapshot; rerun the test script.")
+    source = destination / "source"
+    source.mkdir()  # Never merge a new snapshot into a previous run.
+    for relative, (contents, mode) in captured.items():
+        target = source / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(contents)
+        target.chmod(mode)
+    fingerprints = {str(p): hashlib.sha256(contents).hexdigest()
+                    for p, (contents, _) in captured.items()}
+    (destination / "source-sha256.json").write_text(json.dumps(fingerprints, indent=2) + "\n")
 
 
 def summarize(events, backend, exit_code):
@@ -43,12 +74,8 @@ def main():
                 log.write(output)
                 log.flush()
                 print(output, end="", flush=True)
-    elif mode == "fingerprint":
-        files = list(Path(".").glob("*.go")) + [Path(p) for p in ("go.mod", "go.sum", "flake.nix", "flake.lock")]
-        for directory in ("internal", "guest", "scripts", "tests"):
-            files.extend(p for p in Path(directory).rglob("*") if p.is_file() and "__pycache__" not in p.parts)
-        result = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
-        (path / "source-sha256.json").write_text(json.dumps(result, indent=2) + "\n")
+    elif mode == "snapshot":
+        snapshot(Path("."), path)
     elif mode == "summarize":
         events = [json.loads(line) for line in (path / "tests.jsonl").read_text().splitlines() if line.strip()]
         result = summarize(events, sys.argv[3], int(sys.argv[4]))

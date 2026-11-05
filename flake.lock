@@ -29,17 +29,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1793579529,
-        "narHash": "sha256-jgDxSVZqbJot2yn+o1t3qYdjo5ev/oqe3YnoHwwCzps=",
+        "lastModified": 1793844684,
+        "narHash": "sha256-jusWwJ64+ZSUp+QXtTiCoBQ8memApef08oDw9zsRY9k=",
         "owner": "colony-2",
         "repo": "c2j",
-        "rev": "bcb70400836de1d073e20585b18bd45b91b289ac",
+        "rev": "d6553a24682773c4f5d7777edf93af657ffad453",
         "type": "github"
       },
       "original": {
         "owner": "colony-2",
         "repo": "c2j",
-        "rev": "bcb70400836de1d073e20585b18bd45b91b289ac",
+        "rev": "d6553a24682773c4f5d7777edf93af657ffad453",
         "type": "github"
       }
     }

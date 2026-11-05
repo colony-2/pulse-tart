@@ -1,18 +1,15 @@
 {
   description = "Pinned macOS execution environment for Pulse Orchard guests";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf";
-  inputs.c2j.url = "github:colony-2/c2j/bcb70400836de1d073e20585b18bd45b91b289ac";
+  inputs.c2j.url = "github:colony-2/c2j/d6553a24682773c4f5d7777edf93af657ffad453";
   inputs.c2j.inputs.nixpkgs.follows = "nixpkgs";
 
   outputs = { self, nixpkgs, c2j }:
     let
       system = "aarch64-darwin";
       pkgs = nixpkgs.legacyPackages.${system};
-      # Measured on macOS for this exact source/nixpkgs pair. The upstream
-      # vendorHash does not match the Darwin build's vendored tree.
-      worker = c2j.packages.${system}.c2j.overrideAttrs (_: {
-        vendorHash = "sha256-FVCG5U8OH5ETRifG0MrhxZXxq4BVIlAjub91401+oAE=";
-      });
+      # Upstream's filtered source and vendor hash are pinned by flake.lock.
+      worker = c2j.packages.${system}.c2j;
       runner = pkgs.buildGoModule {
         pname = "pulse-tart-guest";
         version = "0.1.0";

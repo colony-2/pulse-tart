@@ -411,6 +411,12 @@ func exerciseJobDB(t *testing.T, ctx context.Context, kind string, connection Or
 		t.Helper()
 		var a api.Launch
 		fetch("launch?case="+name, &a)
+		var wire struct {
+			Version int `json:"version"`
+		}
+		if json.Unmarshal([]byte(a.Lease), &wire) != nil || wire.Version != 2 {
+			t.Fatal("fixture must export the current JobDB v2 lease format")
+		}
 		a.LaunchID = owner + "-" + id
 		a.Allocation = api.Allocation{Base: "macos*", Capabilities: []string{"nix", "git"}, CPUMillis: 1000, MemoryBytes: 2 << 30}
 		report.addLease(a.Lease)
@@ -449,7 +455,7 @@ func exerciseJobDB(t *testing.T, ctx context.Context, kind string, connection Or
 	if completed.Status != "COMPLETED" || !completed.OutputOK || completed.Claims != 1 || completed.Renewals < 2 || completed.SecretCalls < 1 {
 		t.Fatalf("JobDB execution contract failed: status=%s claims=%d renewals=%d secret_calls=%d", completed.Status, completed.Claims, completed.Renewals, completed.SecretCalls)
 	}
-	t.Logf("JOBDB_VALID_PASS: completed; Nix hello; synthetic secret retrieval; claims=%d renewals=%d secret_calls=%d", completed.Claims, completed.Renewals, completed.SecretCalls)
+	t.Logf("JOBDB_VALID_PASS: completed; macos-*arm64 requirement; lease v2; Nix hello; synthetic secret retrieval; claims=%d renewals=%d secret_calls=%d", completed.Claims, completed.Renewals, completed.SecretCalls)
 	replay := valid
 	replay.LaunchID = owner + "-jobdb-replay"
 	submit(replay)

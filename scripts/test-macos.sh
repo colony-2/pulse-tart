@@ -23,7 +23,6 @@ echo "Results: $out"
   git rev-parse HEAD
   git diff --stat
 } 2>&1 | tee "$out/environment.log"
-python3 scripts/test-report.py fingerprint "$out"
 if [[ $backend == tart && ( $(uname -s) != Darwin || $(uname -m) != arm64 ) ]]; then
   echo 'Direct Tart live tests require an Apple Silicon Mac.' | tee "$out/preflight-error.log"
   exit 2
@@ -32,6 +31,10 @@ if [[ $backend == orchard && ( -z ${PULSE_TEST_ORCHARD_URL:-} || -z ${PULSE_TEST
   echo 'Set PULSE_TEST_ORCHARD_URL and PULSE_TEST_ORCHARD_WORKER.' | tee "$out/preflight-error.log"
   exit 2
 fi
+python3 scripts/test-report.py snapshot "$out"
+# Compile embedded assets and read comparison files from the same frozen tree.
+cd "$out/source"
+export GOWORK=off
 # Do not add -run here: the full suite and the JobDB assertions must execute.
 set +e
 go test -json -race -v -count=1 -timeout=50m ./... 2> "$out/go-stderr.log" \

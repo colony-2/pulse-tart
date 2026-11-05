@@ -122,7 +122,7 @@ type envelope struct {
 }
 
 func workerProcess(l compute.Launch, b config.Base, cpu, memory int64) process {
-	args := []string{"run", "with-lease", "--jobdb", l.Job.JobDB, "--job-id", l.Job.JobID, "--lease-file", "-", "--ci", "--input-mode", "fail", "--execution-cpu", strconv.FormatInt(cpu*1000, 10) + "m", "--execution-memory", strconv.FormatInt(memory, 10) + "Mi", "--execution-platform", "darwin/arm64", "--execution-image", b.Image, "--execution-image-digest", strings.Split(b.Image, "@")[1]}
+	args := []string{"run", "with-lease", "--jobdb", l.Job.JobDB, "--job-id", l.Job.JobID, "--lease-file", "-", "--ci", "--input-mode", "fail", "--execution-base", b.Name, "--execution-cpu", strconv.FormatInt(cpu*1000, 10) + "m", "--execution-memory", strconv.FormatInt(memory, 10) + "Mi", "--execution-platform", "darwin/arm64", "--execution-image", b.Image, "--execution-image-digest", strings.Split(b.Image, "@")[1]}
 	for _, cap := range b.Capabilities {
 		args = append(args, "--execution-capability", cap)
 	}

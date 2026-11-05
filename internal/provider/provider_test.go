@@ -155,10 +155,10 @@ func TestResolvedC2JInvocation(t *testing.T) {
 	}
 	args := env.Process.Args
 	joined := strings.Join(args, " ")
-	if strings.Contains(joined, string(l.Lease)) || strings.Contains(joined, "darw*") {
+	if strings.Contains(joined, string(l.Lease)) || strings.Contains(joined, l.Base) {
 		t.Fatal("lease or selector passed as allocation fact")
 	}
-	for _, want := range []string{"run with-lease", "--lease-file -", "--execution-cpu 4000m", "--execution-memory 8192Mi", "--execution-platform darwin/arm64", "--execution-image " + p.Config.Bases[0].Image, "--execution-capability nix"} {
+	for _, want := range []string{"run with-lease", "--lease-file -", "--execution-base " + p.Config.Bases[0].Name, "--execution-cpu 4000m", "--execution-memory 8192Mi", "--execution-platform darwin/arm64", "--execution-image " + p.Config.Bases[0].Image, "--execution-capability nix"} {
 		if !strings.Contains(joined, want) {
 			t.Error("missing", want)
 		}

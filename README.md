@@ -53,7 +53,7 @@ Existing explicitly configured base names remain valid. To use both versions, as
 
 `GetCapabilities(ctx)` returns `BasesComplete: true` and all `Config.Bases` in configuration order, with complete capability sets and no credentials. Busy, warming, or disabled slots do not change that catalog. Results are independent copies; discovery performs no backend calls or reconciliation. For broad selectors, admission prefers the first configured base that can satisfy the request with an available slot, then the smallest fitting slot within that base. Discovery is a support hint, not a capacity reservation.
 
-The library constructs `c2j run with-lease --lease-file -`, passing the opaque lease unchanged through stdin. It never accepts arbitrary commands or job secrets. c2j retrieves secrets through the lease. The pinned c2j receives the actual slot CPU/memory, platform, OCI image/digest, and verified capabilities; the resolved friendly base name is also available as `PULSE_BASE`. The current c2j version has no `--execution-base` flag.
+The library constructs `c2j run with-lease --lease-file -`, passing the opaque lease unchanged through stdin. It never accepts arbitrary commands or job secrets. c2j retrieves secrets through the lease. The pinned c2j receives the actual slot CPU/memory, platform, OCI image/digest, and verified capabilities; the selected concrete base is passed as `--execution-base` for c2j’s allocation checks. `PULSE_BASE` remains available as diagnostic context. The guest bundle pins c2j with JobDB v2 lease support; upgrading the bundle changes its environment fingerprint so unused templates are rebuilt with the compatible worker.
 
 Acceptance means Orchard accepted creation or local Tart's detached run was dispatched. It does not guarantee VM boot, guest delivery, or job success. Pulse handles failed deployments. Positive runtime caps, start-before constraints, scratch reservations, Linux guests, and shared host Nix volumes are unsupported. Nix and tools are preinstalled in each template; APFS clones reuse the prepared disk efficiently without sharing a writable Nix store.
 
@@ -77,7 +77,7 @@ PULSE_TEST_ORCHARD_WORKER=jnmac25.local \
 ./scripts/test-macos.sh orchard
 ```
 
-The script creates `test-results/<timestamp>-<backend>-<pid>/` and a `.tar.gz` archive beside it. Send the archive for debugging. Generated reports and archives are ignored by Git; the script remains versioned. They include host/tool versions, source fingerprints, complete Go test events and readable logs, a coverage summary, JobDB counters, and VM diagnostics captured before cleanup. Private runtime journals and exported leases stay outside the archive; diagnostic text is redacted. Successful cleanup removes the private test state; failures print the retained location.
+The script creates `test-results/<timestamp>-<backend>-<pid>/` and a `.tar.gz` archive beside it. Send the archive for debugging. Generated reports and archives are ignored by Git; the script remains versioned. Tests run from a source snapshot, so later workspace edits cannot change the running suite or its bundle comparisons. Reports include that snapshot and its fingerprints, host/tool versions, complete Go test events and readable logs, a coverage summary, JobDB counters, and VM diagnostics captured before cleanup. Private runtime journals and exported leases stay outside the archive; diagnostic text is redacted. Successful cleanup removes the private test state; failures print the retained location.
 
 Every run executes the whole Go suite with the race detector and a live test that:
 
@@ -85,7 +85,7 @@ Every run executes the whole Go suite with the race detector and a live test tha
 - Checks overflow, library reopen, duplicate suppression, slot reuse and cleanup.
 - Starts a disposable JobDB/Git service in a separate clone, keeping at most two VMs running.
 - Acquires a real lease and submits it through the public provider API to c2j.
-- Executes Nix `hello`, retrieves a synthetic secret using the lease, renews beyond the initial lease lifetime, and confirms JobDB completion.
+- Executes a job requiring `macos-*arm64`, using a real JobDB v2 lease; runs Nix `hello`, retrieves a synthetic secret, renews beyond the initial lease lifetime, and confirms completion.
 - Rejects completed and expired leases without claiming replacement work.
 
 Live waits print their phase and periodic progress. Template preparation allows 30 minutes, JobDB service startup 3 minutes, and each worker completion 10 minutes, within a 45-minute live-test deadline. The script fails if the live test is skipped or any required JobDB assertion is missing. No existing JobDB, manually supplied lease, production secret, or inbound host port is needed. The fixture's control, JobDB, and Git ports stay on guest loopback addresses. SSH tunnels connect the worker to the disposable service, avoiding guest-to-guest routing and host port exposure. The integration bundle includes the fixture and a test-only wrapper that waits for the tunnel, then execs the same pinned c2j binary with stdin unchanged. The normal library bundle installs neither.
