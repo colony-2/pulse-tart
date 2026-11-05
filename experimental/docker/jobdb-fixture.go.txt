@@ -1,0 +1,263 @@
+// Test-only JobDB/Git service. The provider launches c2j in a different VM.
+// Credentials are exported only through the loopback control port over SSH.
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net"
+	"net/http"
+	"net/http/cgi"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/colony-2/c2j/pkg/contextual"
+	"github.com/colony-2/c2j/pkg/jobdbschema"
+	"github.com/colony-2/c2j/pkg/ops"
+	"github.com/colony-2/c2j/pkg/recipe"
+	"github.com/colony-2/c2j/pkg/starter"
+	"github.com/colony-2/c2j/pkg/worker/commandop"
+	"github.com/colony-2/c2j/pkg/workflowctl"
+	"github.com/colony-2/jobdb/pkg/jobdb"
+	"github.com/colony-2/jobdb/pkg/jobdb/runtime/remote"
+	"github.com/colony-2/jobdb/pkg/jobdb/runtime/sqlite"
+	jobworkflow "github.com/colony-2/jobdb/pkg/workflow"
+)
+
+type secretProvider struct{ calls atomic.Int32 }
+
+func (p *secretProvider) ResolveSecrets(_ context.Context, req jobdb.SecretResolveRequest) (jobdb.SecretResolveResult, error) {
+	p.calls.Add(1)
+	result := jobdb.SecretResolveResult{Secrets: map[string]jobdb.SecretValue{}}
+	for _, name := range req.Names {
+		if name == "fixture" {
+			result.Secrets[name] = jobdb.SecretValue{Value: "guest-only-synthetic-value"}
+		}
+	}
+	return result, nil
+}
+
+// Only the loopback control port exports leases. The test reads it through SSH.
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, "fixture service failed")
+		os.Exit(1)
+	}
+}
+func run() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	dir, err := os.MkdirTemp("", "c2j-fixture-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(dir)
+	secrets := &secretProvider{}
+	db, err := sqlite.NewFromConfig(ctx, sqlite.Config{DBPath: filepath.Join(dir, "jobs.db"), SecretProvider: secrets})
+	if err != nil {
+		return err
+	}
+	defer db.Close(ctx)
+	repo := filepath.Join(dir, "source")
+	if err = os.Mkdir(repo, 0700); err != nil {
+		return err
+	}
+	git := func(args ...string) (string, error) {
+		c := exec.CommandContext(ctx, "git", args...)
+		c.Dir = repo
+		b, e := c.CombinedOutput()
+		return strings.TrimSpace(string(b)), e
+	}
+	if _, err = git("init", "--initial-branch=main"); err != nil {
+		return err
+	}
+	if err = os.Mkdir(filepath.Join(repo, ".c2"), 0700); err != nil {
+		return err
+	}
+	configText := "packages:\n  - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#hello\n"
+	if true {
+		configText = "packages: []\n"
+	}
+	if err = os.WriteFile(filepath.Join(repo, ".c2", "config.yaml"), []byte(configText), 0600); err != nil {
+		return err
+	}
+	_, _ = git("add", ".")
+	if _, err = git("-c", "user.name=Pulse Test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false", "commit", "-m", "fixture"); err != nil {
+		return err
+	}
+	hash, err := git("rev-parse", "HEAD")
+	if err != nil {
+		return err
+	}
+	if _, err = git("clone", "--bare", repo, filepath.Join(dir, "repo.git")); err != nil {
+		return err
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:18880")
+	if err != nil {
+		return err
+	}
+	endpoint := "http://127.0.0.1:18880"
+	gitpath, err := exec.LookPath("git")
+	if err != nil {
+		return err
+	}
+	var renewals, claims atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/fixture-ready", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, `{"ready":true}`) })
+	mux.Handle("/git/", &cgi.Handler{Path: gitpath, Args: []string{"http-backend"}, Root: "/git", Env: []string{"GIT_PROJECT_ROOT=" + dir, "GIT_HTTP_EXPORT_ALL=1"}})
+	api := remote.NewServer(db)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/keepalive") {
+			renewals.Add(1)
+		}
+		if strings.HasSuffix(r.URL.Path, "/lease") || r.URL.Path == "/v1/jobs/poll" {
+			claims.Add(1)
+		}
+		// Administrative access is confined to this disposable loopback fixture.
+		authority := jobdb.CellAuthority{Principal: "fixture", TenantID: "orchard-test", Permissions: map[string]bool{"cells.create": true, "cells.get": true, "jobs.submit": true, "jobs.get": true, "jobs.list": true, "jobs.acquire": true}}
+		api.ServeHTTP(w, r.WithContext(jobdb.WithCellAuthority(r.Context(), authority)))
+	})
+	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	go server.Serve(listener)
+	defer server.Close()
+	runtime, err := remote.New("http://127.0.0.1:18880", &http.Client{Timeout: 30 * time.Second})
+	if err != nil {
+		return err
+	}
+	if _, err = runtime.CreateCell(ctx, jobdb.CreateCellRequest{TenantID: "orchard-test", Name: "root", Repo: "fixture.invalid/pulse/repo"}); err != nil {
+		return err
+	}
+	// A normal c2j Git profile maps the canonical cell repository to the
+	// disposable server. No global Git configuration or credentials are needed.
+	profile := json.RawMessage(`{"version":1,"entries":[{"url":"http://127.0.0.1:18880/git/repo.git","rewrite_from":["https://fixture.invalid/pulse/repo.git"]}]}`)
+	if _, err = db.SetTenantConfigurationValue(ctx, jobdb.SetTenantConfigurationValueRequest{TenantID: "orchard-test", Name: "_c2j_git_profile_read", Value: profile}); err != nil {
+		return err
+	}
+	ops.Register(commandop.GetOp())
+	recipeText := `id: orchard-fixture
+execution:
+  base: ubuntu-*arm64
+  capabilities: [docker, git]
+perms: {jobdb: {secrets: {resolve: [fixture]}}}
+op: command_execution
+inputs:
+  env:
+    FIXTURE_SECRET: '${{ context.secrets.fixture }}'
+  run: "set -eu; test \"$FIXTURE_SECRET\" = guest-only-synthetic-value; /opt/pulse-docker/engine-contract.sh .; sleep 65; printf orchard-c2j-ok"
+outputs:
+  result: '${{ op.outputs.stdout }}'
+`
+	if os.Getenv("PULSE_FIXTURE_SKIP_NIX") == "1" {
+		recipeText = strings.ReplaceAll(recipeText, "hello; ", "")
+	}
+	rec, err := recipe.LoadRecipeFromString([]byte(recipeText))
+	if err != nil {
+		return err
+	}
+	engine, err := jobworkflow.NewEngineBuilder().WithRuntime(runtime).BuildEngine()
+	if err != nil {
+		return err
+	}
+
+	type assignment struct {
+		Job struct {
+			JobDB      string `json:"jobdb"`
+			InstanceID string `json:"instance_id"`
+			TenantID   string `json:"tenant_id"`
+			JobID      string `json:"job_id"`
+		} `json:"job"`
+		Lease string `json:"lease"`
+	}
+	var mu sync.Mutex
+	assignments := map[string]assignment{}
+	control := http.NewServeMux()
+	control.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, `{"ready":true}`) })
+	control.HandleFunc("/launch", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		name := r.URL.Query().Get("case")
+		if name != "valid" && name != "expired" {
+			http.Error(w, "invalid fixture case", 400)
+			return
+		}
+		if old, ok := assignments[name]; ok {
+			json.NewEncoder(w).Encode(old)
+			return
+		}
+		job, e := starter.StartRecipeJob(ctx, workflowctl.StartJob{TenantId: "orchard-test", Cell: "root", CellRepo: "fixture.invalid/pulse/repo", RecipeName: rec.GetMetadata().ID, GitRef: hash, JobContext: contextual.JobContext{Workflow: contextual.WorkflowContext{ProjectId: "orchard-test", CellName: "."}, GitBase: contextual.GitBaseContext{BaseRepo: "fixture.invalid/pulse/repo", BaseRef: hash, ResolvedBaseHash: hash}}}, jobdbschema.WorkflowEngine{Engine: engine, Registry: runtime}, *rec)
+		if e != nil {
+			http.Error(w, "fixture job creation failed", 500)
+			return
+		}
+		duration := 60 * time.Second
+		if name == "expired" {
+			duration = time.Second
+		}
+		lease, e := runtime.GetJobLease(ctx, jobdb.GetJobLeaseRequest{JobKey: job.Key(), WorkerID: "provider-integration", Routes: []jobdb.Route{{JobType: "recipe"}}, LeaseDuration: duration})
+		if e != nil || lease == nil {
+			http.Error(w, "fixture lease acquisition failed", 500)
+			return
+		}
+		capability, e := remote.ExportLease(lease)
+		if e != nil {
+			http.Error(w, "fixture export failed", 500)
+			return
+		}
+		encoded, e := capability.Encode()
+		if e != nil {
+			http.Error(w, "fixture encoding failed", 500)
+			return
+		}
+		var a assignment
+		a.Job.JobDB = endpoint + "/orchard-test"
+		a.Job.InstanceID = "disposable-fixture"
+		a.Job.TenantID = job.Key().TenantId
+		a.Job.JobID = job.Key().JobId
+		a.Lease = string(encoded)
+		assignments[name] = a
+		if name == "expired" {
+			time.Sleep(2 * time.Second)
+		}
+		json.NewEncoder(w).Encode(a)
+	})
+	control.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		a, ok := assignments[r.URL.Query().Get("case")]
+		if !ok {
+			http.Error(w, "fixture case missing", 404)
+			return
+		}
+		info, e := runtime.GetJob(ctx, jobdb.JobKey{TenantId: a.Job.TenantID, JobId: a.Job.JobID})
+		if e != nil {
+			http.Error(w, "fixture job lookup failed", 500)
+			return
+		}
+		// Unexecuted/expired jobs intentionally have no output. Completion
+		// still requires both COMPLETED status and the expected output marker.
+		data, _ := info.Data.GetData()
+		json.NewEncoder(w).Encode(struct {
+			Status      string `json:"status"`
+			OutputOK    bool   `json:"output_ok"`
+			Claims      int32  `json:"claims"`
+			Renewals    int32  `json:"renewals"`
+			SecretCalls int32  `json:"secret_calls"`
+		}{string(info.Status), strings.Contains(string(data), "orchard-c2j-ok"), claims.Load(), renewals.Load(), secrets.calls.Load()})
+	})
+	controlListener, err := net.Listen("tcp", "127.0.0.1:18881")
+	if err != nil {
+		return err
+	}
+	controlServer := &http.Server{Handler: control, ReadHeaderTimeout: 5 * time.Second}
+	defer controlServer.Close()
+	go controlServer.Serve(controlListener)
+	fmt.Println("PULSE_JOBDB_FIXTURE_READY")
+	<-ctx.Done()
+	return nil
+}

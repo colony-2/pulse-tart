@@ -1,0 +1,371 @@
+{
+  "date": "2026-11-05",
+  "result": "incomplete",
+  "production_ready": false,
+  "source_reports": [
+    "20261105T213307Z-docker-orchard-30977",
+    "20261105T214415Z-docker-orchard-35282"
+  ],
+  "cases": {
+    "linux_cold_boot": {
+      "description": "Digest-pinned Linux guest and private Engine",
+      "status": "passed",
+      "reason": "",
+      "samples": 4,
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "linux_jobdb": {
+      "description": "Real supplied lease, concrete base, Docker build/run in c2j worktree",
+      "status": "passed",
+      "reason": "Executed through supplied JobDB lease and shared Provider API; see per-VM job reports.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "linux_api_discovery": {
+      "description": "Opt-in capability discovery and definite unsupported declines",
+      "status": "passed",
+      "reason": "Executed through supplied JobDB lease and shared Provider API; see per-VM job reports.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "linux_replay": {
+      "description": "Controller process restart, duplicate delivery and single lease execution",
+      "status": "passed",
+      "reason": "Executed through supplied JobDB lease and shared Provider API; see per-VM job reports.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "linux_two_slots": {
+      "description": "Two simultaneous engines with identical names, volumes and TCP ports",
+      "status": "passed",
+      "reason": "Two engines with distinct IDs, identical names/volumes/ports, concurrent jobs.",
+      "engine_ids": [
+        "799fa940-c6c6-4938-ad48-2597e3fe3f02",
+        "b93e414c-35d9-4bd9-a47e-c1d40c7a5fbd"
+      ],
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "linux_two_generations": {
+      "description": "Two sequential disposable allocations per experimental slot",
+      "status": "passed",
+      "reason": "",
+      "generations": 2,
+      "slots": 2,
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "linux_cli": {
+      "description": "Buildx load, bind directories/files/spaces/tmp, Compose, exec, logs, copy and stdin streaming",
+      "status": "passed",
+      "reason": "Executed through supplied JobDB lease and shared Provider API; see per-VM job reports.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "linux_sdk": {
+      "description": "Docker SDK and concurrent API requests",
+      "status": "passed",
+      "reason": "Official Python Docker SDK, concurrent ping and container run.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "linux_testcontainers_go": {
+      "description": "Go Testcontainers with resource reaper enabled",
+      "status": "passed",
+      "reason": "Resource reaper enabled; HTTP service reached through mapped port.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "linux_testcontainers_java": {
+      "description": "Java Testcontainers with resource reaper enabled",
+      "status": "passed",
+      "reason": "Resource reaper enabled; HTTP service reached through mapped port.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "linux_native_fs": {
+      "description": "Native filesystem baseline and Git/build timings",
+      "status": "passed",
+      "reason": "Native-disk primitives and timings recorded; this is not shared-filesystem evidence.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "linux_suspend": {
+      "description": "Exact deployed Linux suspend/restore combination",
+      "status": "failed",
+      "reason": "VM failed: tart command failed: \"Error: You can only suspend macOS VMs\": exit status 64",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "macos_shared_mounts": {
+      "description": "Same-host virtiofs in macOS/Linux at identical guest paths",
+      "status": "not_run",
+      "reason": "Orchard hostDirs disabled; no scoped workspace API or worker shell available. Native probes not executed; full matrix still requires implementation. See findings.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "macos_c2j_workspace": {
+      "description": "Actual c2j checkout and temporary directories on shared storage",
+      "status": "not_run",
+      "reason": "Orchard hostDirs disabled; no scoped workspace API or worker shell available. Native probes not executed; full matrix still requires implementation. See findings.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "shared_fs_semantics": {
+      "description": "Cross-guest files, ownership, chmod/chown, rename, symlinks, locks, concurrent writers, case and xattrs",
+      "status": "not_run",
+      "reason": "Orchard hostDirs disabled; no scoped workspace API or worker shell available. Native probes not executed; full matrix still requires implementation. See findings.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "shared_notifications": {
+      "description": "Cross-guest notifications independently of visibility",
+      "status": "not_run",
+      "reason": "Orchard hostDirs disabled; no scoped workspace API or worker shell available. Native probes not executed; full matrix still requires implementation. See findings.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "shared_dependency_build": {
+      "description": "Shared versus native Git/dependency installation/build measurements",
+      "status": "not_run",
+      "reason": "Orchard hostDirs disabled; no scoped workspace API or worker shell available. Native probes not executed; full matrix still requires implementation. See findings.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "shared_path_isolation": {
+      "description": "Symlink/traversal cannot access another allocation or infrastructure",
+      "status": "not_run",
+      "reason": "Orchard hostDirs disabled; no scoped workspace API or worker shell available. Native probes not executed; full matrix still requires implementation. See findings.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "share_suspend": {
+      "description": "Suspend/restore with directory shares on both OSes",
+      "status": "not_run",
+      "reason": "Orchard hostDirs disabled; no scoped workspace API or worker shell available. Native probes not executed; full matrix still requires implementation. See findings.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "share_retarget": {
+      "description": "Suspended clone with another share or supported post-resume retarget",
+      "status": "not_run",
+      "reason": "Orchard hostDirs disabled; no scoped workspace API or worker shell available. Native probes not executed; full matrix still requires implementation. See findings.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "share_directory_replacement": {
+      "description": "Host-directory replacement and stale-handle/cache tests",
+      "status": "not_run",
+      "reason": "Orchard hostDirs disabled; no scoped workspace API or worker shell available. Native probes not executed; full matrix still requires implementation. See findings.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "macos_two_slots_generations": {
+      "description": "Two simultaneous pairs and two sequential jobs per slot",
+      "status": "not_run",
+      "reason": "Worker advertises two total VM units; two pairs need four. Shared workspace also blocked.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "macos_authenticated_api": {
+      "description": "Allocation-scoped authenticated bridge and conventional Unix socket",
+      "status": "passed",
+      "reason": "Per-allocation SSH key, pinned engine host key, real macOS Unix socket including conventional /var/run/docker.sock. Public admin image credentials remain a lab limitation.",
+      "evidence": "20261105T214415Z-docker-orchard-35282"
+    },
+    "macos_docker_api": {
+      "description": "SDK, CLI, Buildx, Compose, attach/log streams and copy",
+      "status": "not_run",
+      "reason": "Real ping/inspect/start/exec/logs/copy passed through relay. CLI plugins, build and attach coverage remain incomplete.",
+      "evidence": "20261105T214415Z-docker-orchard-35282"
+    },
+    "macos_tcp_ports": {
+      "description": "Fixed/dynamic loopback and wildcard publications reach macOS localhost",
+      "status": "passed",
+      "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json.",
+      "evidence": "20261105T214415Z-docker-orchard-35282"
+    },
+    "macos_start_gate": {
+      "description": "Start completion waits for relay binding; no registration sleeps",
+      "status": "passed",
+      "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json.",
+      "evidence": "20261105T214415Z-docker-orchard-35282"
+    },
+    "macos_port_conflicts": {
+      "description": "Local port conflict is detected and reported",
+      "status": "passed",
+      "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json.",
+      "evidence": "20261105T214415Z-docker-orchard-35282"
+    },
+    "macos_relay_recovery": {
+      "description": "Relay restart discovers existing publications and restores forwarding",
+      "status": "passed",
+      "reason": "Force-killed relay reconnected and rediscovered preexisting Linux publication at localhost:18080.",
+      "evidence": "20261105T214415Z-docker-orchard-35282"
+    },
+    "macos_callbacks": {
+      "description": "Container-to-job callback route/name",
+      "status": "not_run",
+      "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "udp": {
+      "description": "UDP publication behavior, independent of TCP",
+      "status": "not_run",
+      "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "macos_testcontainers": {
+      "description": "Go and Java Testcontainers with reaper enabled",
+      "status": "not_run",
+      "reason": "Go Testcontainers with Ryuk passed; Java on macOS has not been run.",
+      "evidence": "20261105T214415Z-docker-orchard-35282"
+    },
+    "orchard_workspace_provision": {
+      "description": "Remote scoped host-directory create/mount/delete without host filesystem access",
+      "status": "failed",
+      "reason": "{\"message\":\"host directory sharing is disabled; restart the controller with --insecure-allow-host-dirs to enable this unsafe feature\"}",
+      "http_status": 400,
+      "evidence": "20261105T214415Z-docker-orchard-35282"
+    },
+    "pair_placement_accounting": {
+      "description": "Both guests on selected worker, companion resources reserved separately",
+      "status": "not_run",
+      "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "pair_partial_creation": {
+      "description": "Either VM creation fails and partial ownership recovers",
+      "status": "not_run",
+      "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "fault_mount_credentials": {
+      "description": "Failure during mount preparation and credential distribution",
+      "status": "not_run",
+      "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "fault_handoff": {
+      "description": "Failures before/during/after handoff preserve unknown and prevent fallback duplication",
+      "status": "not_run",
+      "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "fault_engine_controller_relay": {
+      "description": "Independent controller, engine and relay termination",
+      "status": "not_run",
+      "reason": "Engine stop returned 502; engine and force-killed relay recovered. Controller independence covered for Linux, but full paired-allocation fault matrix remains untested.",
+      "evidence": "20261105T214415Z-docker-orchard-35282"
+    },
+    "lease_loss_cleanup": {
+      "description": "Completion, cancellation/lease loss and abandoned-attempt reclamation",
+      "status": "not_run",
+      "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "backend_unreachable": {
+      "description": "Observation failure is not empty inventory or free capacity",
+      "status": "not_run",
+      "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "stress_cpu_memory_disk": {
+      "description": "Container CPU/memory saturation and disk exhaustion measurements",
+      "status": "not_run",
+      "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "private_prune": {
+      "description": "Prune private engine without affecting other allocation or infrastructure",
+      "status": "passed",
+      "reason": "Pruned first private VM; second VM container stayed reachable.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    },
+    "amd64": {
+      "description": "Optional AMD64 emulation, separately reported",
+      "status": "not_run",
+      "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result.",
+      "evidence": "20261105T213307Z-docker-orchard-30977"
+    }
+  },
+  "linux_samples": [
+    {
+      "vm": "pulse-docker-9abf4a8e9d07-g0-s0",
+      "cold_prepare_seconds": 33.50341393298004
+    },
+    {
+      "vm": "pulse-docker-9abf4a8e9d07-g0-s1",
+      "cold_prepare_seconds": 35.468451224965975
+    },
+    {
+      "vm": "pulse-docker-9abf4a8e9d07-g0-s1",
+      "job_seconds": 95.86014533502748,
+      "exit": "0",
+      "jobdb": {
+        "status": "COMPLETED",
+        "output_ok": true,
+        "claims": 1,
+        "renewals": 6,
+        "secret_calls": 1
+      }
+    },
+    {
+      "vm": "pulse-docker-9abf4a8e9d07-g0-s0",
+      "job_seconds": 97.95889654499479,
+      "exit": "0",
+      "jobdb": {
+        "status": "COMPLETED",
+        "output_ok": true,
+        "claims": 1,
+        "renewals": 6,
+        "secret_calls": 1
+      }
+    },
+    {
+      "vm": "pulse-docker-9abf4a8e9d07-g0-s0",
+      "cleanup_seconds": 4.068007460038643
+    },
+    {
+      "vm": "pulse-docker-9abf4a8e9d07-relay-mac",
+      "cleanup_seconds": 6.037581420037895
+    },
+    {
+      "vm": "pulse-docker-9abf4a8e9d07-g0-s1",
+      "cleanup_seconds": 4.027125751017593
+    },
+    {
+      "vm": "pulse-docker-9abf4a8e9d07-g1-s1",
+      "cold_prepare_seconds": 34.87234151602024
+    },
+    {
+      "vm": "pulse-docker-9abf4a8e9d07-g1-s0",
+      "cold_prepare_seconds": 36.888306307955645
+    },
+    {
+      "vm": "pulse-docker-9abf4a8e9d07-g1-s1",
+      "job_seconds": 98.2903933780035,
+      "exit": "0",
+      "jobdb": {
+        "status": "COMPLETED",
+        "output_ok": true,
+        "claims": 1,
+        "renewals": 6,
+        "secret_calls": 1
+      }
+    },
+    {
+      "vm": "pulse-docker-9abf4a8e9d07-g1-s0",
+      "job_seconds": 98.30144058697624,
+      "exit": "0",
+      "jobdb": {
+        "status": "COMPLETED",
+        "output_ok": true,
+        "claims": 1,
+        "renewals": 6,
+        "secret_calls": 1
+      }
+    },
+    {
+      "vm": "pulse-docker-9abf4a8e9d07-g1-s0",
+      "cleanup_seconds": 2.039229333982803
+    },
+    {
+      "vm": "pulse-docker-9abf4a8e9d07-g1-s1",
+      "cleanup_seconds": 4.035151794028934
+    }
+  ],
+  "macos_network_probe": {
+    "127.0.0.1": {
+      "port": 32768,
+      "application_ready_seconds": 0.17152183399999998
+    },
+    "0.0.0.0": {
+      "port": 32769,
+      "application_ready_seconds": 0.17389683299999992
+    },
+    "conflict": "start failed and container stopped",
+    "status": "passed"
+  },
+  "engine_data_path": "Per-allocation end-to-end SSH over an external-controller tunnel; no controller credentials in guests.",
+  "cleanup_followup": "All owned VM API records deleted; final inventory empty. Earlier failed suspend stop HTTP412 resolved by verified-UID deletion. Physical storage removal not attested."
+}
