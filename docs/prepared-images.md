@@ -1,5 +1,7 @@
 # Prepare a macOS worker image
 
+`tart.DefaultBases()` provides pinned Tahoe 26.6.2 and Sequoia 15.7.7 images, in that preference order. Each entry includes the exact version checked during bootstrap. Use these as the starting image, or supply your own digest-pinned image.
+
 The library automatically installs pinned Nix, c2j, the guest runner, Git, Node/pnpm, uv and Python when preparing a slot. To avoid repeating installation for new slot templates, bake the same environment into a reusable base image.
 
 Build the archive from the same checkout as the library:
@@ -28,7 +30,7 @@ tart login registry.example.com
 tart push pulse-image-builder registry.example.com/team/pulse-macos:v1
 ```
 
-Keep registry credentials outside the image. Publishing is a separate operator action. Set `Base.Image` to the resulting manifest digest, `Base.OSVersion` to the actual guest version, and `Base.Name` to a concrete name such as `macos-sequoia-15.7.7-arm64`. Set SSH credentials to those baked into the image; configure registry pull access on the Orchard worker or local Tart host.
+Keep registry credentials outside the image. Publishing is a separate operator action. Set `Base.Image` to the resulting manifest digest, `Base.OSVersion` to the actual guest version, and `Base.Name` to a concrete name such as `macos-26-arm64`. Set SSH credentials to those baked into the image; configure registry pull access on the Orchard worker or local Tart host.
 
 The library verifies the prepared environment fingerprint and tool paths. A match skips installation; a mismatch rebuilds the pinned environment. Changing c2j, Nix inputs, guest code or installation settings requires rebuilding the image to retain that shortcut. Never edit fingerprints to force a match.
 

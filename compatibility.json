@@ -1,6 +1,6 @@
 {
-  "validation_date": "2026-11-04",
-  "status": "in-process cell API; Orchard and direct Tart full suites and real JobDB execution passed",
+  "validation_date": "2026-11-05",
+  "status": "Tahoe 26.6.2 full Orchard suite and JobDB execution passed; Sequoia 15.7.7 validated on Orchard and direct Tart; Tahoe direct Tart awaits manual run",
   "provider": {
     "module": "github.com/colony-2/pulse-tart",
     "api": "github.com/colony-2/pulse-provider-api",
@@ -10,9 +10,9 @@
   },
   "guest": {
     "platform": "darwin/arm64",
-    "macos": "15.7.7",
-    "build": "24G720",
-    "image": "ghcr.io/cirruslabs/macos-sequoia-base@sha256:eee659985b01e4df2a6c0754bd8d25e54969933c43fdcd4edef8bea337b3d354"
+    "macos": "26.6.2",
+    "build": "25G83",
+    "image": "ghcr.io/cirruslabs/macos-tahoe-base@sha256:4aaa751fa7538902d73c767f27a066fc87e83f183069da4e4b5022863abd4c77"
   },
   "nix": {
     "version": "2.35.4",
@@ -36,7 +36,8 @@
   },
   "defaults": {
     "cpu": 4,
-    "memory_mib": 8192
+    "memory_mib": 8192,
+    "base": "macos-26-arm64"
   },
   "validation": {
     "deterministic": "Passed: Go race tests, vet, Linux amd64 and macOS arm64 cross-builds, API/slot/journal tests, byte-exact lease stdin, HTTP boundaries, direct Tart commands/ownership/detached processes and SSH delivery/cancellation",
@@ -71,12 +72,19 @@
         "renewals_at_completion_check": 5,
         "secret_calls": 1
       },
-      "api_commit": "9991fd574083fa1580bc1596efdf7bd214240bdb"
+      "api_commit": "9991fd574083fa1580bc1596efdf7bd214240bdb",
+      "guest": {
+        "platform": "darwin/arm64",
+        "macos": "15.7.7",
+        "build": "24G720",
+        "image": "ghcr.io/cirruslabs/macos-sequoia-base@sha256:eee659985b01e4df2a6c0754bd8d25e54969933c43fdcd4edef8bea337b3d354"
+      }
     },
     "not_run": [
       "hosted CI workflows",
       "production TLS/roles",
-      "Orchard controller/worker restart fault injection"
+      "Orchard controller/worker restart fault injection",
+      "Tahoe guest on direct Tart"
     ],
     "direct_tart_lifecycle": {
       "result": "passed",
@@ -86,7 +94,13 @@
       "two_clone_handoff_and_exit_seconds": 18.703,
       "host_macos": "26.7.2",
       "tart_version": "2.41.1",
-      "limitation": "Historical invalid-lease lifecycle run; superseded by direct_tart_cell_api below."
+      "limitation": "Historical invalid-lease lifecycle run; superseded by direct_tart_cell_api below.",
+      "guest": {
+        "platform": "darwin/arm64",
+        "macos": "15.7.7",
+        "build": "24G720",
+        "image": "ghcr.io/cirruslabs/macos-sequoia-base@sha256:eee659985b01e4df2a6c0754bd8d25e54969933c43fdcd4edef8bea337b3d354"
+      }
     },
     "direct_tart_cell_api": {
       "result": "passed",
@@ -124,7 +138,13 @@
         "secret_calls": 1
       },
       "cleanup": "TestLive cleanup completed without errors; coordinator, job clones and templates removed.",
-      "api_commit": "9991fd574083fa1580bc1596efdf7bd214240bdb"
+      "api_commit": "9991fd574083fa1580bc1596efdf7bd214240bdb",
+      "guest": {
+        "platform": "darwin/arm64",
+        "macos": "15.7.7",
+        "build": "24G720",
+        "image": "ghcr.io/cirruslabs/macos-sequoia-base@sha256:eee659985b01e4df2a6c0754bd8d25e54969933c43fdcd4edef8bea337b3d354"
+      }
     },
     "api_adoption": {
       "date": "2026-11-05",
@@ -136,7 +156,51 @@
         "updated wildcard selector grammar without aliases",
         "Go race tests, vet, Linux build and macOS ARM64 cross-build"
       ],
-      "limitation": "Live Orchard and Tart records above were captured against the prior API; native VM execution was not rerun for this API update."
+      "limitation": "Tahoe Orchard live validation now also covers this API version; direct Tart records still use the prior API."
+    },
+    "orchard_tahoe_cell_api": {
+      "result": "passed",
+      "date": "2026-11-05",
+      "test": "TestLive",
+      "api_commit": "401f11e595a82ac6bba64261c45d057e8b7f8bc3",
+      "seconds": 418.26,
+      "template_preparation_seconds": 212.536,
+      "two_clone_handoff_and_exit_seconds": 16.105,
+      "jobdb_service_startup_seconds": 8,
+      "base": "macos-26-arm64",
+      "guest": {
+        "platform": "darwin/arm64",
+        "macos": "26.6.2",
+        "build": "25G83",
+        "image": "ghcr.io/cirruslabs/macos-tahoe-base@sha256:4aaa751fa7538902d73c767f27a066fc87e83f183069da4e4b5022863abd4c77"
+      },
+      "report": "test-results/20261105T020424Z-orchard-99463/summary.json",
+      "checks": [
+        "two independent suspended templates",
+        "two concurrent clones",
+        "invalid-lease handoff and shutdown",
+        "library reopen during startup",
+        "duplicate suppression",
+        "overflow no_capacity",
+        "slot reuse",
+        "exact-identity cleanup",
+        "expected c2j failure marker verified",
+        "byte-preserving lease envelope",
+        "real JobDB completion through public Submit",
+        "Nix hello execution",
+        "lease-bound synthetic secret retrieval",
+        "renewal beyond initial lease lifetime",
+        "completed lease rejection without reacquisition",
+        "expired lease rejection without execution or reacquisition"
+      ],
+      "jobdb": {
+        "claims": 1,
+        "output_ok": true,
+        "renewals": 6,
+        "secret_calls": 1,
+        "status": "COMPLETED"
+      },
+      "cleanup": "All test VM API records removed; Orchard inventory verified empty."
     }
   },
   "historical_measurements": {
@@ -219,5 +283,21 @@
     "reviewed_source": "https://github.com/openai/tart",
     "reviewed_commit": "bcc8084a22b1ab1cc7162626537d1c6cd794cdba",
     "real_host_test": "Full race suite, lifecycle and real JobDB execution passed on user macOS host, 2026-11-04"
-  }
+  },
+  "base_catalog": [
+    {
+      "name": "macos-26-arm64",
+      "platform": "darwin/arm64",
+      "macos": "26.6.2",
+      "build": "25G83",
+      "image": "ghcr.io/cirruslabs/macos-tahoe-base@sha256:4aaa751fa7538902d73c767f27a066fc87e83f183069da4e4b5022863abd4c77"
+    },
+    {
+      "name": "macos-15-arm64",
+      "platform": "darwin/arm64",
+      "macos": "15.7.7",
+      "build": "24G720",
+      "image": "ghcr.io/cirruslabs/macos-sequoia-base@sha256:eee659985b01e4df2a6c0754bd8d25e54969933c43fdcd4edef8bea337b3d354"
+    }
+  ]
 }

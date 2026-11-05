@@ -21,7 +21,7 @@ func testConfig(t *testing.T) Config {
 	t.Helper()
 	dir := t.TempDir()
 	_ = os.Chmod(dir, 0700)
-	return Config{OwnerID: "library", StateDir: dir, Bases: []Base{{Name: "macos-sequoia-15.7.7-arm64", Image: liveImage, OSVersion: "15.7.7", SSHPassword: "admin", Capabilities: []string{"git", "nix"}}}, Slots: []SlotGroup{{Name: "standard", Count: 1, Base: "macos-sequoia-15.7.7-arm64"}}}
+	return Config{OwnerID: "library", StateDir: dir, Bases: []Base{{Name: "macos-sequoia-15.7.7-arm64", Image: DefaultBases()[1].Image, OSVersion: "15.7.7", SSHPassword: "admin", Capabilities: []string{"git", "nix"}}}, Slots: []SlotGroup{{Name: "standard", Count: 1, Base: "macos-sequoia-15.7.7-arm64"}}}
 }
 func TestSharedConfigAndCopies(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { json.NewEncoder(w).Encode([]any{}) }))

@@ -14,18 +14,11 @@ import (
 cfg := tart.Config{
     OwnerID: "pulse-macos",
     StateDir: "/var/lib/pulse/macos", // private, durable, absolute path
-    Bases: []tart.Base{{
-        Name: "macos-sequoia-15.7.7-arm64",
-        Image: "ghcr.io/cirruslabs/macos-sequoia-base@sha256:eee659985b01e4df2a6c0754bd8d25e54969933c43fdcd4edef8bea337b3d354",
-        OSVersion: "15.7.7", // verified inside the template
-        SSHUsername: "admin",
-        SSHPassword: tart.Secret(imagePassword),
-        Capabilities: []string{"nix", "git", "node", "pnpm", "uv", "python"},
-    }},
-    Slots: []tart.SlotGroup{{
-        Name: "standard", Count: 2, Base: "macos-sequoia-15.7.7-arm64",
-        CPU: 4, MemoryMiB: 8192,
-    }},
+    Bases: tart.DefaultBases(), // Tahoe 26 first, then Sequoia 15; pinned images
+    Slots: []tart.SlotGroup{
+        {Name: "tahoe", Count: 1, Base: "macos-26-arm64"},
+        {Name: "sequoia", Count: 1, Base: "macos-15-arm64"},
+    },
 }
 runtime, err := tart.NewOrchard(cfg, tart.OrchardConfig{
     URL: "https://orchard.example.test", Worker: "mac-worker",
@@ -47,7 +40,16 @@ Constructors validate and copy configuration, lock the journal, and create no VM
 
 Each slot owns an independently booted, uniquely named suspended template with a unique MAC. A job gets a fresh clone of that snapshot; only one unresolved or active job may use a slot. The original template never receives a lease. CPU/memory stay fixed during restore. Busy or warming slots return `no_capacity`; there is no internal lease queue. Counts must fit the physical host's VM and resource limits.
 
-**Defaults: 4 vCPU and 8 GiB per slot.** Zero CPU/memory selects those defaults. A zero count drains a group. Use separate groups for larger jobs. Use concrete names such as `macos-tahoe-26.7-arm64` only for images actually running that version. Selectors match concrete names case-sensitively; each `*` anywhere matches zero or more characters, including `/` (for example, `macos-*arm64`). Other characters are literal. Aliases are no longer supported; replace old selectors such as `macos` with `macos*`. All requested capabilities must match, and configured capabilities are probed before a template becomes ready.
+**Defaults: 4 vCPU and 8 GiB per slot.** Zero CPU/memory selects those defaults. A zero count drains a group. Use separate groups for larger jobs. The built-in catalog uses `macos-26-arm64` and `macos-15-arm64`; each entry pins an image digest and its verified exact guest version. Selectors match concrete names case-sensitively; each `*` anywhere matches zero or more characters, including `/` (for example, `macos-*arm64`). Other characters are literal. Aliases are no longer supported; replace old selectors such as `macos` with `macos*`. All requested capabilities must match, and configured capabilities are probed before a template becomes ready.
+
+`DefaultBases()` supplies independent configuration values for these public Cirrus Labs images. It does not enable slots automatically. Both images use the public `admin`/`admin` SSH login; override image and credentials when using a private image. Bootstrap installs the pinned Nix/c2j tool environment. These are general-purpose images without Xcode.
+
+| Base | Pinned guest OS | Use |
+| --- | --- | --- |
+| `macos-26-arm64` | Tahoe 26.6.2 | Preferred environment |
+| `macos-15-arm64` | Sequoia 15.7.7 | Compatibility testing |
+
+Existing explicitly configured base names remain valid. To use both versions, assign slots to both as above; for two Tahoe slots, set its count to two and omit the Sequoia group. `macos-26*` selects Tahoe and `macos-15*` selects Sequoia. Broad selectors such as `macos*` may use either according to preference and availability.
 
 `GetCapabilities(ctx)` returns `BasesComplete: true` and all `Config.Bases` in configuration order, with complete capability sets and no credentials. Busy, warming, or disabled slots do not change that catalog. Results are independent copies; discovery performs no backend calls or reconciliation. For broad selectors, admission prefers the first configured base that can satisfy the request with an available slot, then the smallest fitting slot within that base. Discovery is a support hint, not a capacity reservation.
 
@@ -88,6 +90,6 @@ Every run executes the whole Go suite with the race detector and a live test tha
 
 Live waits print their phase and periodic progress. Template preparation allows 30 minutes, JobDB service startup 3 minutes, and each worker completion 10 minutes, within a 45-minute live-test deadline. The script fails if the live test is skipped or any required JobDB assertion is missing. No existing JobDB, manually supplied lease, production secret, or inbound host port is needed. The fixture's control, JobDB, and Git ports stay on guest loopback addresses. SSH tunnels connect the worker to the disposable service, avoiding guest-to-guest routing and host port exposure. The integration bundle includes the fixture and a test-only wrapper that waits for the tunnel, then execs the same pinned c2j binary with stdin unchanged. The normal library bundle installs neither.
 
-Optional overrides: `PULSE_TEST_IMAGE`, `PULSE_TEST_OS_VERSION`, `PULSE_TEST_SSH_PASSWORD`, and `PULSE_TEST_TART_HOME`. Tests require outbound GitHub/Nix access and may take several minutes for first-time preparation. They never reset private state to retry an uncertain launch.
+The live test defaults to `macos-26-arm64`. Select Sequoia with `PULSE_TEST_BASE=macos-15-arm64 ./scripts/test-macos.sh`. To test a custom image, set `PULSE_TEST_IMAGE` and `PULSE_TEST_OS_VERSION` together. Additional overrides: `PULSE_TEST_SSH_PASSWORD` and `PULSE_TEST_TART_HOME`. Tests require outbound GitHub/Nix access and may take several minutes for first-time preparation. They never reset private state to retry an uncertain launch.
 
 See [image preparation](docs/prepared-images.md), [snapshot behavior and measurements](docs/suspended-templates.md), [the specification](SPEC.md), and [validation records](compatibility.json).

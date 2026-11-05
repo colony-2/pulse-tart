@@ -18,8 +18,6 @@ import (
 	"github.com/colony-2/pulse-tart/internal/orchard"
 )
 
-const liveImage = "ghcr.io/cirruslabs/macos-sequoia-base@sha256:eee659985b01e4df2a6c0754bd8d25e54969933c43fdcd4edef8bea337b3d354"
-
 // TestLive exercises slot lifecycle and real JobDB jobs through the public API.
 func TestLive(t *testing.T) {
 	kind := os.Getenv("PULSE_TEST_BACKEND")
@@ -33,19 +31,35 @@ func TestLive(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	image := os.Getenv("PULSE_TEST_IMAGE")
-	if image == "" {
-		image = liveImage
+	baseName := os.Getenv("PULSE_TEST_BASE")
+	if baseName == "" {
+		baseName = "macos-26-arm64"
 	}
-	version := os.Getenv("PULSE_TEST_OS_VERSION")
-	if version == "" {
-		version = "15.7.7"
+	var base Base
+	for _, candidate := range DefaultBases() {
+		if candidate.Name == baseName {
+			base = candidate
+			break
+		}
+	}
+	if base.Name == "" {
+		t.Fatal("PULSE_TEST_BASE must be macos-26-arm64 or macos-15-arm64")
+	}
+	image, version := os.Getenv("PULSE_TEST_IMAGE"), os.Getenv("PULSE_TEST_OS_VERSION")
+	if (image == "") != (version == "") {
+		t.Fatal("set PULSE_TEST_IMAGE and PULSE_TEST_OS_VERSION together")
+	}
+	if image != "" {
+		base.Name = "macos-test-" + version + "-arm64"
+		base.Image, base.OSVersion = image, version
 	}
 	password := os.Getenv("PULSE_TEST_SSH_PASSWORD")
 	if password == "" {
-		password = "admin"
+		password = string(base.SSHPassword)
 	}
-	c := Config{OwnerID: owner, StateDir: dir, Bases: []Base{{Name: "macos-test-" + version + "-arm64", Image: image, OSVersion: version, SSHPassword: Secret(password), Capabilities: []string{"nix", "git", "node", "pnpm", "uv", "python"}}}, Slots: []SlotGroup{{Name: "standard", Count: 2, Base: "macos-test-" + version + "-arm64"}}}
+	base.SSHPassword = Secret(password)
+	c := Config{OwnerID: owner, StateDir: dir, Bases: []Base{base}, Slots: []SlotGroup{{Name: "standard", Count: 2, Base: base.Name}}}
+	t.Logf("testing base %s; guest macOS %s; image %s", base.Name, base.OSVersion, base.Image)
 	archive, e := bundle.Build(assets, "integration")
 	if e != nil {
 		t.Fatal(e)
