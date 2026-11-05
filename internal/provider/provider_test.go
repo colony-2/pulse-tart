@@ -70,7 +70,7 @@ func fixture(t *testing.T) (*Provider, *fake) {
 	t.Helper()
 	dir := t.TempDir()
 	_ = os.Chmod(dir, 0700)
-	c, e := config.Normalize(config.Config{OwnerID: "test", StateDir: dir, GuestBundle: []byte("test-bundle"), Bases: []config.Base{{Name: "macos-sequoia-15.7.7-arm64", Aliases: []string{"macos", "darwin"}, Image: "example.test/macos@sha256:" + strings.Repeat("a", 64), OSVersion: "15.7.7", SSHPassword: "admin", Capabilities: []string{"nix", "git"}}}, Slots: []config.SlotGroup{{Name: "small", Count: 2, Base: "macos-sequoia-15.7.7-arm64"}}})
+	c, e := config.Normalize(config.Config{OwnerID: "test", StateDir: dir, GuestBundle: []byte("test-bundle"), Bases: []config.Base{{Name: "macos-sequoia-15.7.7-arm64", Image: "example.test/macos@sha256:" + strings.Repeat("a", 64), OSVersion: "15.7.7", SSHPassword: "admin", Capabilities: []string{"nix", "git"}}}, Slots: []config.SlotGroup{{Name: "small", Count: 2, Base: "macos-sequoia-15.7.7-arm64"}}})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -83,7 +83,7 @@ func fixture(t *testing.T) (*Provider, *fake) {
 	return p, f
 }
 func launch(id string) compute.Launch {
-	return compute.Launch{LaunchID: id, Allocation: compute.Allocation{Base: "macos"}, Job: compute.JobRef{JobDB: "https://jobs.test/tenant", InstanceID: "db", TenantID: "tenant", JobID: "job"}, Lease: "LEASE-SENTINEL"}
+	return compute.Launch{LaunchID: id, Allocation: compute.Allocation{Base: "macos*"}, Job: compute.JobRef{JobDB: "https://jobs.test/tenant", InstanceID: "db", TenantID: "tenant", JobID: "job"}, Lease: "LEASE-SENTINEL"}
 }
 
 func TestCellValidationAndNoSideEffects(t *testing.T) {
@@ -95,8 +95,8 @@ func TestCellValidationAndNoSideEffects(t *testing.T) {
 		want   compute.Status
 	}{
 		{"empty base", func(l *compute.Launch) { l.Base = "" }, compute.Rejected},
-		{"middle wildcard", func(l *compute.Launch) { l.Base = "mac*os" }, compute.Rejected},
-		{"two wildcards", func(l *compute.Launch) { l.Base = "mac**" }, compute.Rejected},
+		{"unmatched wildcard", func(l *compute.Launch) { l.Base = "mac*os" }, compute.Unsupported},
+		{"base whitespace", func(l *compute.Launch) { l.Base = "mac os" }, compute.Rejected},
 		{"negative cpu", func(l *compute.Launch) { l.CPUMillis = -1 }, compute.Rejected},
 		{"oversized memory", func(l *compute.Launch) { l.MemoryBytes = compute.MaxQuantity + 1 }, compute.Rejected},
 		{"empty lease", func(l *compute.Launch) { l.Lease = "" }, compute.Rejected},
@@ -127,7 +127,7 @@ func TestResolvedC2JInvocation(t *testing.T) {
 	p, f := slotsFixture(t, 1)
 	warmSlots(t, p)
 	l := launch("invocation")
-	l.Base = "darw*"
+	l.Base = "macos-*arm64"
 	l.CPUMillis = 1
 	l.Capabilities = []string{"git", "nix", "git"}
 	out, e := p.Submit(t.Context(), []compute.Launch{l})

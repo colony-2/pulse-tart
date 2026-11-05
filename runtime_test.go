@@ -21,7 +21,7 @@ func testConfig(t *testing.T) Config {
 	t.Helper()
 	dir := t.TempDir()
 	_ = os.Chmod(dir, 0700)
-	return Config{OwnerID: "library", StateDir: dir, Bases: []Base{{Name: "macos-sequoia-15.7.7-arm64", Image: liveImage, OSVersion: "15.7.7", SSHPassword: "admin", Aliases: []string{"macos"}, Capabilities: []string{"git", "nix"}}}, Slots: []SlotGroup{{Name: "standard", Count: 1, Base: "macos-sequoia-15.7.7-arm64"}}}
+	return Config{OwnerID: "library", StateDir: dir, Bases: []Base{{Name: "macos-sequoia-15.7.7-arm64", Image: liveImage, OSVersion: "15.7.7", SSHPassword: "admin", Capabilities: []string{"git", "nix"}}}, Slots: []SlotGroup{{Name: "standard", Count: 1, Base: "macos-sequoia-15.7.7-arm64"}}}
 }
 func TestSharedConfigAndCopies(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { json.NewEncoder(w).Encode([]any{}) }))
@@ -36,11 +36,10 @@ func TestSharedConfigAndCopies(t *testing.T) {
 	if r.p.Config.Slots[0].CPU != 4 || r.p.Config.Slots[0].MemoryMiB != 8192 {
 		t.Fatal("wrong defaults")
 	}
-	c.Bases[0].Aliases[0] = "modified"
 	c.Bases[0].Capabilities[0] = "modified"
 	c.Slots[0].Count = 0
 	connection.WorkerLabels["rack"] = "modified"
-	if r.p.Config.Bases[0].Aliases[0] != "macos" || r.p.Config.Bases[0].Capabilities[0] != "git" || r.p.Config.Slots[0].Count != 1 || r.p.Config.WorkerLabels["rack"] != "one" {
+	if r.p.Config.Bases[0].Capabilities[0] != "git" || r.p.Config.Slots[0].Count != 1 || r.p.Config.WorkerLabels["rack"] != "one" {
 		t.Fatal("retained mutable config")
 	}
 	if e = r.Close(); e != nil {

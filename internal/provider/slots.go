@@ -317,7 +317,15 @@ func (p *Provider) chooseSlot(ctx context.Context, l compute.Launch, spec backen
 	if len(ids) == 0 {
 		return spec, "", compute.Unsupported
 	}
+	preference := make(map[string]int, len(p.Config.Bases))
+	for i, base := range p.Config.Bases {
+		preference[base.Name] = i
+	}
 	sort.Slice(ids, func(i, j int) bool {
+		pa, pb := preference[targets[ids[i]].image], preference[targets[ids[j]].image]
+		if pa != pb {
+			return pa < pb
+		}
 		a, b := targets[ids[i]].spec, targets[ids[j]].spec
 		if a.CPU != b.CPU {
 			return a.CPU < b.CPU

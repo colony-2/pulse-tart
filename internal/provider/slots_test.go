@@ -353,3 +353,62 @@ func TestMixedSlotSizesAndTemplateListing(t *testing.T) {
 		t.Fatal("templates leaked into job listing", page, err)
 	}
 }
+
+func TestBasePreferenceAndAdmission(t *testing.T) {
+	for _, tc := range []struct {
+		name, selector    string
+		busy, constrained bool
+		want              string
+	}{
+		{name: "preference before size", selector: "macos**", want: "preferred"},
+		{name: "explicit selector", selector: "macos-secondary", want: "secondary"},
+		{name: "busy preferred base", selector: "macos-*", busy: true, want: "secondary"},
+		{name: "required capability", selector: "macos-*", constrained: true, want: "secondary"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p, f := slotsFixture(t, 0)
+			first := p.Config.Bases[0]
+			first.Name = "macos-preferred"
+			first.Capabilities = []string{"nix"}
+			second := first
+			second.Name = "macos-secondary"
+			second.Capabilities = []string{"nix", "git"}
+			p.Config.Bases = []config.Base{first, second}
+			p.Config.Slots = []config.SlotGroup{
+				{Name: "preferred", Count: 1, Base: first.Name, CPU: 8, MemoryMiB: 16384},
+				{Name: "secondary", Count: 1, Base: second.Name, CPU: 4, MemoryMiB: 8192},
+			}
+			if err := p.Reconcile(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			// Give the fixture distinct stable MAC identities before preparation.
+			for _, s := range p.Store.data.Slots {
+				v := f.vms[s.Name]
+				v.UID = s.ID
+				f.vms[s.Name] = v
+				s.UID = v.UID
+			}
+			warmSlots(t, p)
+			if tc.busy {
+				l := launch("occupy")
+				l.Base = first.Name
+				got, err := p.Submit(t.Context(), []compute.Launch{l})
+				if err != nil || got[0].Status != compute.Accepted {
+					t.Fatal(got, err)
+				}
+			}
+			l := launch("select")
+			l.Base = tc.selector
+			if tc.constrained {
+				l.Capabilities = []string{"git"}
+			}
+			got, err := p.Submit(t.Context(), []compute.Launch{l})
+			if err != nil || got[0].Status != compute.Accepted {
+				t.Fatal(got, err)
+			}
+			if slot := p.Store.data.Records[l.LaunchID].SlotID; slot != tc.want+"-0001" {
+				t.Fatalf("selected %s, want %s", slot, tc.want)
+			}
+		})
+	}
+}

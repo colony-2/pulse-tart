@@ -45,7 +45,7 @@ func TestLive(t *testing.T) {
 	if password == "" {
 		password = "admin"
 	}
-	c := Config{OwnerID: owner, StateDir: dir, Bases: []Base{{Name: "macos-test-" + version + "-arm64", Aliases: []string{"macos"}, Image: image, OSVersion: version, SSHPassword: Secret(password), Capabilities: []string{"nix", "git", "node", "pnpm", "uv", "python"}}}, Slots: []SlotGroup{{Name: "standard", Count: 2, Base: "macos-test-" + version + "-arm64"}}}
+	c := Config{OwnerID: owner, StateDir: dir, Bases: []Base{{Name: "macos-test-" + version + "-arm64", Image: image, OSVersion: version, SSHPassword: Secret(password), Capabilities: []string{"nix", "git", "node", "pnpm", "uv", "python"}}}, Slots: []SlotGroup{{Name: "standard", Count: 2, Base: "macos-test-" + version + "-arm64"}}}
 	archive, e := bundle.Build(assets, "integration")
 	if e != nil {
 		t.Fatal(e)

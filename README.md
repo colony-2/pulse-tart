@@ -16,7 +16,6 @@ cfg := tart.Config{
     StateDir: "/var/lib/pulse/macos", // private, durable, absolute path
     Bases: []tart.Base{{
         Name: "macos-sequoia-15.7.7-arm64",
-        Aliases: []string{"macos", "darwin", "macos-15"},
         Image: "ghcr.io/cirruslabs/macos-sequoia-base@sha256:eee659985b01e4df2a6c0754bd8d25e54969933c43fdcd4edef8bea337b3d354",
         OSVersion: "15.7.7", // verified inside the template
         SSHUsername: "admin",
@@ -37,16 +36,20 @@ runtime, err := tart.NewOrchard(cfg, tart.OrchardConfig{
 if err != nil { return err }
 defer runtime.Close()
 var provider api.Provider = runtime
-_ = provider
+catalog, err := provider.GetCapabilities(context.Background())
+if err != nil { return err }
+_ = catalog // Complete configured bases, most preferred first.
 // The host owns this loop and its error/retry policy.
 return runtime.Run(context.Background())
 ```
 
-Constructors validate and copy configuration, lock the journal, and create no VMs. Call `Run(ctx)` or periodically call `Reconcile(ctx)` to prepare slots and clean up completed work. `Run` returns on cancellation or the first reconciliation error. `Check` checks connectivity; `Slots` reports preparation and occupancy. `Submit` and `List` support concurrent calls; `List` is strictly observational.
+Constructors validate and copy configuration, lock the journal, and create no VMs. Call `Run(ctx)` or periodically call `Reconcile(ctx)` to prepare slots and clean up completed work. `Run` returns on cancellation or the first reconciliation error. `Check` checks connectivity; `Slots` reports preparation and occupancy. `GetCapabilities`, `Submit`, and `List` support concurrent calls; discovery and listing are strictly observational.
 
 Each slot owns an independently booted, uniquely named suspended template with a unique MAC. A job gets a fresh clone of that snapshot; only one unresolved or active job may use a slot. The original template never receives a lease. CPU/memory stay fixed during restore. Busy or warming slots return `no_capacity`; there is no internal lease queue. Counts must fit the physical host's VM and resource limits.
 
-**Defaults: 4 vCPU and 8 GiB per slot.** Zero CPU/memory selects those defaults. A zero count drains a group. Use separate groups for larger jobs. Use concrete names such as `macos-tahoe-26.7-arm64` only for images actually running that version; broader names belong in explicit aliases. Selectors match exact names/aliases or one trailing `*`. All requested capabilities must match, and configured capabilities are probed before a template becomes ready.
+**Defaults: 4 vCPU and 8 GiB per slot.** Zero CPU/memory selects those defaults. A zero count drains a group. Use separate groups for larger jobs. Use concrete names such as `macos-tahoe-26.7-arm64` only for images actually running that version. Selectors match concrete names case-sensitively; each `*` anywhere matches zero or more characters, including `/` (for example, `macos-*arm64`). Other characters are literal. Aliases are no longer supported; replace old selectors such as `macos` with `macos*`. All requested capabilities must match, and configured capabilities are probed before a template becomes ready.
+
+`GetCapabilities(ctx)` returns `BasesComplete: true` and all `Config.Bases` in configuration order, with complete capability sets and no credentials. Busy, warming, or disabled slots do not change that catalog. Results are independent copies; discovery performs no backend calls or reconciliation. For broad selectors, admission prefers the first configured base that can satisfy the request with an available slot, then the smallest fitting slot within that base. Discovery is a support hint, not a capacity reservation.
 
 The library constructs `c2j run with-lease --lease-file -`, passing the opaque lease unchanged through stdin. It never accepts arbitrary commands or job secrets. c2j retrieves secrets through the lease. The pinned c2j receives the actual slot CPU/memory, platform, OCI image/digest, and verified capabilities; the resolved friendly base name is also available as `PULSE_BASE`. The current c2j version has no `--execution-base` flag.
 

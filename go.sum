@@ -1,5 +1,5 @@
-github.com/colony-2/pulse-provider-api v0.0.0-20261103203509-9991fd574083 h1:hmDhHyRsdvtTdQ3Tno6+6XosjcbfMX5VQJRBTfWXOxg=
-github.com/colony-2/pulse-provider-api v0.0.0-20261103203509-9991fd574083/go.mod h1:k+Xog7z+dE1wxvl9fN4rfsptevZ5ANIH37j0xKZ8YJo=
+github.com/colony-2/pulse-provider-api v0.0.0-20261105011626-401f11e595a8 h1:pxBcBhAe/+SuTorfX6L8ia4k/lYx6bqF+n5jYRcyo2U=
+github.com/colony-2/pulse-provider-api v0.0.0-20261105011626-401f11e595a8/go.mod h1:k+Xog7z+dE1wxvl9fN4rfsptevZ5ANIH37j0xKZ8YJo=
 golang.org/x/crypto v0.58.0 h1:COkYLr4k7nDI4r6QtMML2AfzeIswWHAJthLS6K/M/54=
 golang.org/x/crypto v0.58.0/go.mod h1:Xh+kl5A+M0gMiWDytH2Hhr5Z7WbNCpv/eB/EFgfSk+w=
 golang.org/x/net v0.60.0 h1:79p50tfZlm0J9YfoDsSi639qSXNGVwEzOPLCxM2FsYU=

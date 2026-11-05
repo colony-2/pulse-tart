@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 var Err = errors.New("invalid provider configuration")
@@ -30,19 +31,17 @@ func (Secret) GoString() string { return "[REDACTED]" }
 type Config struct {
 	OwnerID          string
 	StateDir         string
-	Bases            []Base
+	Bases            []Base // Most preferred first; discovery preserves this order.
 	Slots            []SlotGroup
 	GuestBundle      []byte
 	PollInterval     time.Duration
 	BootstrapTimeout time.Duration
 }
 
-// Base names a concrete macOS ARM64 environment and its explicitly declared
-// aliases. Image must be a digest-pinned Tart OCI reference. OSVersion is checked
-// inside the template before it can become ready. No aliases are inferred.
+// Base names a concrete macOS ARM64 environment. Image must be a digest-pinned
+// Tart OCI reference. OSVersion is checked inside the template before readiness.
 type Base struct {
 	Name        string
-	Aliases     []string
 	Image       string
 	OSVersion   string
 	SSHUsername string
@@ -109,6 +108,11 @@ var capabilities = map[string]bool{"nix": true, "git": true, "node": true, "pnpm
 
 func Name(s string) bool { return namePattern.MatchString(s) }
 
+// BaseSelector follows the shared API's label grammar. Only '*' is special.
+func BaseSelector(s string) bool {
+	return s != "" && len(s) <= 4096 && utf8.ValidString(s) && !strings.ContainsAny(s, "\x00 \t\r\n")
+}
+
 // Normalize validates and deep-copies all retained input. Defaults apply equally
 // to both backends. Counts have no default: zero explicitly drains a group.
 func Normalize(c Config) (Config, error) {
@@ -131,18 +135,12 @@ func Normalize(c Config) (Config, error) {
 	seen := map[string]bool{}
 	for i := range c.Bases {
 		b := &c.Bases[i]
-		if !Name(b.Name) || seen[b.Name] || !digestImage.MatchString(b.Image) || !osVersion.MatchString(b.OSVersion) || b.SSHPassword == "" {
+		if !BaseSelector(b.Name) || strings.Contains(b.Name, "*") || seen[b.Name] || !digestImage.MatchString(b.Image) || !osVersion.MatchString(b.OSVersion) || b.SSHPassword == "" {
 			return Config{}, Err
 		}
 		seen[b.Name] = true
-		b.Aliases = slices.Clone(b.Aliases)
 		b.Capabilities = slices.Clone(b.Capabilities)
 		b.SSHHostKey = slices.Clone(b.SSHHostKey)
-		for _, a := range b.Aliases {
-			if !Name(a) {
-				return Config{}, Err
-			}
-		}
 		for _, cap := range b.Capabilities {
 			if !capabilities[cap] {
 				return Config{}, Err
@@ -155,14 +153,6 @@ func Normalize(c Config) (Config, error) {
 		}
 		if !Name(b.SSHUsername) || len(b.SSHPassword) > 16384 {
 			return Config{}, Err
-		}
-	}
-	// An alias must not shadow another concrete environment's identity.
-	for _, b := range c.Bases {
-		for _, alias := range b.Aliases {
-			if alias != b.Name && seen[alias] {
-				return Config{}, Err
-			}
 		}
 	}
 	groups := map[string]bool{}

@@ -24,7 +24,7 @@ func newID() string {
 	return hex.EncodeToString(b[:])
 }
 func validLaunch(l compute.Launch) bool {
-	if !launchID.MatchString(l.LaunchID) || l.Base == "" || len(l.Base) > 256 || strings.Count(l.Base, "*") > 1 || (strings.Contains(l.Base, "*") && !strings.HasSuffix(l.Base, "*")) {
+	if !launchID.MatchString(l.LaunchID) || !config.BaseSelector(l.Base) {
 		return false
 	}
 	for _, q := range []int64{l.CPUMillis, l.MemoryBytes, l.ScratchBytes} {
@@ -76,17 +76,7 @@ func (p *Provider) base(name string) config.Base {
 	return config.Base{}
 }
 func baseMatches(b config.Base, l compute.Launch) bool {
-	matches := func(s string) bool {
-		if strings.HasSuffix(l.Base, "*") {
-			return strings.HasPrefix(s, strings.TrimSuffix(l.Base, "*"))
-		}
-		return s == l.Base
-	}
-	ok := matches(b.Name)
-	for _, a := range b.Aliases {
-		ok = ok || matches(a)
-	}
-	if !ok {
+	if !matchBase(l.Base, b.Name) {
 		return false
 	}
 	for _, c := range l.Capabilities {
@@ -95,6 +85,27 @@ func baseMatches(b config.Base, l compute.Launch) bool {
 		}
 	}
 	return true
+}
+
+// matchBase treats '*' as zero or more arbitrary characters, including '/'.
+// Every other character is literal; filepath.Match would impose extra syntax.
+func matchBase(selector, name string) bool {
+	parts := strings.Split(selector, "*")
+	if len(parts) == 1 {
+		return selector == name
+	}
+	if !strings.HasPrefix(name, parts[0]) {
+		return false
+	}
+	name = name[len(parts[0]):]
+	for _, part := range parts[1 : len(parts)-1] {
+		i := strings.Index(name, part)
+		if i < 0 {
+			return false
+		}
+		name = name[i+len(part):]
+	}
+	return strings.HasSuffix(name, parts[len(parts)-1])
 }
 
 type process struct {

@@ -4,8 +4,8 @@
   "provider": {
     "module": "github.com/colony-2/pulse-tart",
     "api": "github.com/colony-2/pulse-provider-api",
-    "api_commit": "9991fd574083fa1580bc1596efdf7bd214240bdb",
-    "interface": "Provider.Submit / Provider.List",
+    "api_commit": "401f11e595a82ac6bba64261c45d057e8b7f8bc3",
+    "interface": "Provider.GetCapabilities / Provider.Submit / Provider.List",
     "configuration": "shared typed Config plus OrchardConfig or TartConfig"
   },
   "guest": {
@@ -70,7 +70,8 @@
         "claims": 1,
         "renewals_at_completion_check": 5,
         "secret_calls": 1
-      }
+      },
+      "api_commit": "9991fd574083fa1580bc1596efdf7bd214240bdb"
     },
     "not_run": [
       "hosted CI workflows",
@@ -122,7 +123,20 @@
         "renewals_at_completion_check": 5,
         "secret_calls": 1
       },
-      "cleanup": "TestLive cleanup completed without errors; coordinator, job clones and templates removed."
+      "cleanup": "TestLive cleanup completed without errors; coordinator, job clones and templates removed.",
+      "api_commit": "9991fd574083fa1580bc1596efdf7bd214240bdb"
+    },
+    "api_adoption": {
+      "date": "2026-11-05",
+      "api_commit": "401f11e595a82ac6bba64261c45d057e8b7f8bc3",
+      "result": "deterministic checks passed",
+      "checks": [
+        "complete read-only base discovery with independent results",
+        "configuration-order preference and busy-base fallback",
+        "updated wildcard selector grammar without aliases",
+        "Go race tests, vet, Linux build and macOS ARM64 cross-build"
+      ],
+      "limitation": "Live Orchard and Tart records above were captured against the prior API; native VM execution was not rerun for this API update."
     }
   },
   "historical_measurements": {

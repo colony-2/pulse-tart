@@ -35,7 +35,8 @@ var ErrClosed = errors.New("provider closed")
 var _ api.Provider = (*Runtime)(nil)
 
 // Runtime owns one state directory exclusively. Run or Reconcile prepares slots
-// and cleans up completed instances. Submit and List implement the shared API.
+// and cleans up completed instances. GetCapabilities, Submit and List implement
+// the shared API.
 // Close releases local resources; running VMs survive it. A new Runtime using
 // the same state directory recovers the journal. Never share a directory across
 // backends, owners, or simultaneously running hosts.
@@ -112,6 +113,28 @@ func (r *Runtime) Submit(ctx context.Context, launches []api.Launch) ([]api.Subm
 		return nil, ErrClosed
 	}
 	return r.p.Submit(ctx, launches)
+}
+
+// GetCapabilities returns the complete configured catalog in Config.Bases order.
+// It does not inspect slot availability or contact the backend. Returned slices
+// belong to the caller; no SSH credentials or image configuration are exposed.
+func (r *Runtime) GetCapabilities(ctx context.Context) (api.Capabilities, error) {
+	if err := ctx.Err(); err != nil {
+		return api.Capabilities{}, err
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if err := ctx.Err(); err != nil {
+		return api.Capabilities{}, err
+	}
+	if r.closed {
+		return api.Capabilities{}, ErrClosed
+	}
+	out := api.Capabilities{BasesComplete: true, Bases: make([]api.BaseCapabilities, 0, len(r.p.Config.Bases))}
+	for _, b := range r.p.Config.Bases {
+		out.Bases = append(out.Bases, api.BaseCapabilities{Name: b.Name, Capabilities: append([]string{}, b.Capabilities...)})
+	}
+	return out, nil
 }
 func (r *Runtime) List(ctx context.Context, q api.ListRequest) (api.ListResponse, error) {
 	r.mu.RLock()
