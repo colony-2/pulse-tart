@@ -32,6 +32,31 @@ contents cleaned only after all old guests/readers are gone is a candidate to
 test; it is not yet a proven reusable-template design. The existing Orchard
 workspace-provisioning limitation is unchanged.
 
+## Focused runs at 02:04 and 02:19 UTC — common preflight bug
+
+Both `20261106T020428Z-docker-tart-19927` (cold) and
+`20261106T021906Z-docker-tart-39077` (suspended) stopped during constructor
+verification for the first `capabilities` call, before any c2j lease handoff.
+Both passed authenticated socket/port/conflict checks and Go Testcontainers.
+The suspended clone's native log explicitly records state restoration and
+resume. Both reached the relay after the guarded boot-identity/shared-marker
+checks. All three VMs in each run have successful cleanup samples.
+
+The harness made `/opt/pulse-docker` mode 0700 and owned by `pulseworker`, but the
+provider's `test -x /opt/pulse-docker/c2j` ran as the SSH management user `admin`.
+That check cannot traverse the worker's private directory. It now runs with the
+same worker identity and environment as Docker/git. The shared-workspace probe
+also needs `/sbin` in PATH for `mount`; that was missing and is fixed.
+
+Preflight failures now identify a named check (for example `c2j_executable` or
+`buildx`) without exposing arbitrary guest stderr. Workspace errors retain a
+safe exception/errno code. Reports retain partial boot/share observations and
+mark an attempted macOS job check failed instead of leaving it `not_run`.
+Shell-probe regression tests exercise worker identity, PATH, plugin failure
+reporting and diagnostic redaction. Full Go race tests, vet, Darwin package
+builds and Python cleanup tests pass. Rerun the cold workflow first to verify
+that it progresses past admission; another live Mac pass is still required.
+
 ## Implementation follow-up — awaiting the next Mac run
 
 The focused `scripts/test-macos-docker.sh` now implements real macOS c2j execution

@@ -181,6 +181,19 @@ def run_workspace(environment):
             assert (
                 command(mac, "cat " + workspace + "/linux-marker").strip() == b"linux"
             )
+            h.report.setdefault("workspace_progress", []).append(
+                {
+                    "slot": slot["index"],
+                    "generation": generation,
+                    "lifecycle": h.a.lifecycle,
+                    "primary_boot_identity": boot,
+                    "template_boot_identity": slot["boot"],
+                    "suspended_resume_verified": s["suspendable"]
+                    and boot == slot["boot"],
+                    "shared_host_primary_engine_markers_verified": True,
+                }
+            )
+            h.save()
             command(
                 linux,
                 "sudo docker run -d --name identical-container -p 127.0.0.1:18080:8080 python:3.13-alpine python -m http.server 8080",
@@ -191,7 +204,11 @@ def run_workspace(environment):
             h.persist(mac)
 
             def run_job(primary, engine):
-                h.run_job(primary)
+                try:
+                    h.run_job(primary)
+                except Exception as error:
+                    h.result("macos_c2j_workspace", "failed", str(error))
+                    raise
                 log = (h.OUT / (primary["spec"]["name"] + "-contract.log")).read_text()
                 if (
                     "WORKSPACE=" + workspace + "/tmp/recipe-worktree-" not in log

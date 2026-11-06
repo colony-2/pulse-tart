@@ -21,7 +21,7 @@ env = dict(
     TMPDIR=workspace + "/tmp",
     TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="/var/run/docker.sock",
     DOCKER_HOST="unix:///var/run/docker.sock",
-    PATH="/opt/pulse-docker:/usr/local/bin:/usr/bin:/bin",
+    PATH="/opt/pulse-docker:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
 )
 with open(root + "/worker.log", "wb") as log:
     try:

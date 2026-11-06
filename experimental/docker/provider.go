@@ -124,13 +124,12 @@ func newAllocation(ctx context.Context, c Config) (*Provider, error) {
 	probe := fmt.Sprintf("test \"$(uname -s)/$(uname -m)\" = Linux/aarch64 && test \"$(nproc)\" -ge %d && test \"$(awk '/MemTotal/{print $2}' /proc/meminfo)\" -ge %d && sudo -u pulseworker docker --host unix:///var/run/docker.sock info >/dev/null && sudo -u pulseworker docker buildx version >/dev/null && sudo -u pulseworker docker compose version >/dev/null && test -x /opt/pulse-docker/c2j", c.CPU, c.MemoryMiB*1024)
 	probe = ". /etc/os-release; test \"$ID\" = ubuntu && test \"$VERSION_ID\" = " + strings.TrimSuffix(strings.TrimPrefix(c.Base, "ubuntu-"), "-arm64") + " && " + probe + " && git --version >/dev/null && cat /proc/sys/kernel/random/boot_id && sudo -u pulseworker docker --host unix:///var/run/docker.sock info --format '{{.ID}}'"
 	if c.platform == "darwin" {
-		version := strings.TrimSuffix(strings.TrimPrefix(c.Base, "macos-tahoe-"), "-arm64")
-		probe = fmt.Sprintf("test \"$(uname -s)/$(uname -m)\" = Darwin/arm64 && test \"$(sw_vers -productVersion)\" = %s && test \"$(sysctl -n hw.ncpu)\" -ge %d && test \"$(sysctl -n hw.memsize)\" -ge %d && test -x /opt/pulse-docker/c2j && git --version >/dev/null && sudo -u pulseworker env HOME=/Users/pulseworker PATH=/usr/local/bin:/usr/bin:/bin docker info >/dev/null && sudo -u pulseworker env HOME=/Users/pulseworker PATH=/usr/local/bin:/usr/bin:/bin docker buildx version >/dev/null && sudo -u pulseworker env HOME=/Users/pulseworker PATH=/usr/local/bin:/usr/bin:/bin docker compose version >/dev/null && sysctl -n kern.bootsessionuuid && sudo -u pulseworker /usr/local/bin/docker info --format '{{.ID}}'", version, c.CPU, c.MemoryMiB<<20)
+		probe = macOSProbe(c)
 	}
-	var identity bytes.Buffer
-	if err = c.Guest.Exec(ctx, probe, nil, &identity, io.Discard); err != nil {
+	var identity, diagnostics bytes.Buffer
+	if err = c.Guest.Exec(ctx, probe, nil, &identity, &diagnostics); err != nil {
 		p.Close()
-		return nil, fmt.Errorf("Docker allocation verification failed")
+		return nil, verificationFailure("Docker allocation verification failed", "PULSE_PREFLIGHT_FAILED=", diagnostics.String())
 	}
 	if c.platform == "darwin" {
 		var engineIdentity bytes.Buffer
@@ -150,10 +149,11 @@ func newAllocation(ctx context.Context, c Config) (*Provider, error) {
 			guest Guest
 			mode  string
 		}{{c.Guest, "write"}, {c.Engine, "engine"}, {c.Guest, "finish"}} {
-			command := "sudo -u pulseworker env HOME=/Users/pulseworker PATH=/usr/local/bin:/usr/bin:/bin /usr/bin/python3 /opt/pulse-docker/check-workspace.py " + step.mode + " " + c.Workspace + " " + nonce
-			if err = step.guest.Exec(ctx, command, nil, io.Discard, io.Discard); err != nil {
+			command := "sudo -u pulseworker env HOME=/Users/pulseworker PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/python3 /opt/pulse-docker/check-workspace.py " + step.mode + " " + c.Workspace + " " + nonce
+			diagnostics.Reset()
+			if err = step.guest.Exec(ctx, command, nil, io.Discard, &diagnostics); err != nil {
 				p.Close()
-				return nil, fmt.Errorf("shared workspace/container verification failed at %s", step.mode)
+				return nil, verificationFailure("shared workspace/container verification failed at "+step.mode, "PULSE_WORKSPACE_FAILED=", diagnostics.String())
 			}
 		}
 	}
