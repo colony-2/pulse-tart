@@ -1,133 +1,98 @@
 # Experimental Docker allocations
 
 This prototype is isolated in `experimental/docker`. Normal macOS provider
-configuration and capabilities are unchanged. It includes the demonstrated Linux
-Docker allocation/API bridge and a new macOS c2j shared-workspace path awaiting
-live Mac validation. **It does not implement the complete production macOS Docker
+configuration and capabilities are unchanged. It includes Linux Docker execution
+and a macOS/private-Linux-engine prototype using native, unshared workspaces. **It does not implement the complete production macOS Docker
 allocation contract.** See
 [detailed findings](docker-prototype-findings.md) before using the results.
 
-## Investigate shared-file consistency first
+## Current no-bind qualification
 
-The latest run (`20261106T201055Z-docker-tart-86731`) passes tool/permission
-admission but fails a shared-file content assertion before c2j starts. Run the
-smaller reproduction before another complete job suite:
+The current contract is [Docker without bind mounts](../pulse-tart-docker-capability-requirements.md).
+See the [implementation plan](docker-capability-plan.md) for selected architecture,
+remaining release gates and source audit. Production defaults are unchanged.
 
-```sh
-./scripts/test-macos-docker-filesystem.sh
-```
-
-This builds only the SSH helper and boots two disposable VMs with the same
-virtiofs setup. It does not build c2j, macOS Docker CLI/plugins, or a JobDB fixture.
-It checks both directions, reader-created and writer-created files, same-size
-and growing overwrites, explicit fsync, and atomic replacement. The report
-records first-read bytes/hashes, host backing-file observations, delayed reads,
-and diagnostic remounts. A failed first read stays failed even if waiting or
-remounting makes it correct later. These are synthetic fixtures, not user files.
-
-If plain guest sharing passes, it installs Docker Engine in its private Linux
-VM and tests container creation/overwrite through a normal bind mount. If plain
-sharing fails, Docker setup is skipped and explicitly marked `not_run`.
-
-Inspect `filesystem-coherence.json` in the generated archive. Scope is
-`filesystem-coherence`, with explicit required cases and `complete: false` for
-the full contract. This is a diagnostic, not a workaround: ordinary jobs cannot
-be required to remount their workspace or sleep after every file write. VM
-cleanup and relative `test-results/...` output follow the other scripts.
-
-## Focused macOS execution test
-
-On the Apple Silicon Mac, run:
+On the Apple Silicon worker:
 
 ```sh
-./scripts/test-macos-docker.sh
+./scripts/test-macos-docker.sh --rounds 2
 ```
 
-This prepares one macOS template, then runs two fresh macOS/Linux pairs
-sequentially. Each macOS primary executes a real supplied JobDB lease through
-`NewMacOS` and the shared provider API. It installs native CLI/Buildx/Compose,
-runs c2j as `pulseworker`, and checks real builds, Compose, SDK forwarding,
-checkout and TMPDIR binds against an allocation-private Linux engine. Native
-CLI/Buildx are built from upstream source; Compose uses its upstream Darwin
-release with its published SHA256 verified (its watcher requires cgo).
-
-To test warm macOS clones from the same model:
-
-```sh
-./scripts/test-macos-docker.sh --lifecycle suspended
-```
-
-The default is `--lifecycle cold`. Suspended mode must preserve the template's
-boot identity and shared mount while running both real jobs; it cannot silently
-fall back to cold boot. Linux always cold-boots. Optional `--slots 2` exercises
-two distinct templates **sequentially**, not two concurrent pairs; the latter
-remains unverified. Each job has a fresh primary and companion.
-
-A slot owns a stable host share directory for the lifetime of its template.
-The provider mounts it at `/Users/Shared/pulse/work` in both guests and places
-jobs under `jobs/<allocation>/tmp`. It never swaps or renames the share root.
-Only after both job VMs are deleted does it remove that job's directory. The
-next generation must see no old job directory, and the root inode must match.
-Cleanup rejects symlinked/replaced roots and `jobs` directories.
-
-A focused report declares `scope: macos-workspace` and lists `required_cases`.
-Exit 0 means this workflow passed; `complete: false` still means the **full**
-prototype contract has outstanding cases. Filesystem diagnostics (including
-locking and case behavior), UDP, callbacks and the broader failure matrix are
-not silently declared passing. Full-suite behavior remains unchanged. Both
-report and archive messages use paths beginning with `test-results/`.
-
-The new flow has been built and unit-tested on Linux, including cross-compiling
-macOS c2j/tools. It has not yet been run on the Mac. Build/download time varies;
-the two jobs themselves deliberately wait 65 seconds each to exercise lease
-renewals. Send the generated archive after running it.
-
-## Run real-machine experiments
-
-Requirements on the controller: Go (the module/toolchain versions in `go.mod`),
-Python 3.9+, curl, tar, and ssh-keygen; network access to GitHub, GHCR, Docker Hub,
-Ubuntu packages and Maven Central. Guest images use the public `admin/admin`
-lab login. Use disposable infrastructure; this is not a hardened deployment.
-The suite downloads tools and images and executes real containers and c2j leases.
-
-On an Apple Silicon Mac with Tart installed:
-
-```sh
-./scripts/test-docker-prototype.sh tart
-```
-
-From an external controller against the tested Orchard lab:
+From an external controller against Orchard:
 
 ```sh
 PULSE_TEST_ORCHARD_URL=http://192.168.1.195:6120 \
 PULSE_TEST_ORCHARD_WORKER=jnmac25.local \
-./scripts/test-docker-prototype.sh orchard
+PULSE_TEST_ENGINE_WORKER_ADDRESS=192.168.1.195 \
+./scripts/test-docker-prototype.sh orchard --no-bind --rounds 2
 ```
 
-Optional: set `PULSE_TEST_C2J_VERSION` to a tag or commit; the default resolves
-`latest` once and records its commit. `PULSE_TEST_TART_HOME` selects a local Tart
-home. `PULSE_TEST_SSH_PASSWORD` overrides the lab image password. The Python
-Orchard driver currently supports this unauthenticated lab controller, not
-production controller authentication.
+The worker address must be reachable from the guests; it need not be the controller
+address. Orchard must support VM endpoints. The endpoint exposes a dedicated
+allocation-key-only SSH service, never the image's password-based management SSH.
+Native Tart uses a detached worker-local TCP bridge for this experiment; production
+service supervision remains a separate implementation gate.
 
-Both entry points snapshot the source they test, write source hashes and
-`report.json`, capture logs, and produce an ignored `test-results/*.tar.gz`.
-Exit **2** means failed or incomplete requested coverage. An unrun case is never
-counted as passing. The full-contract suite is expected to exit 2 even where all
-implemented checks work. The focused suite above reports its narrower scope. The full Orchard run took about nine minutes; image
-pulls/package downloads and failures can add several minutes. Every guest command
-and polling stage is bounded. A returned local Tart run confirmed basic shared visibility; see the findings.
+Each round runs a Linux c2j allocation, deletes it, then runs a macOS/Linux pair.
+By default this exercises sequential cold allocations. For native suspended
+clones use `--no-bind-platform macos --lifecycle suspended --rounds 2`; the script
+prepares a credential-free template, verifies preserved boot/MAC identity and
+absence of previous job/key files, and checks fresh engine identities.
 
-For a shorter API/network-only check (still explicitly incomplete):
+For two concurrent native suspended slots, each with two generations:
 
 ```sh
-./scripts/test-docker-prototype.sh orchard --relay-only
+./scripts/test-macos-docker-matrix.py
 ```
 
-The full suite creates two Linux allocations concurrently, runs two generations,
-and tests a macOS/Linux pair after releasing one Linux VM. Each guest reserves
-4 CPUs, 8 GiB and one Orchard VM unit. It never attaches the host Docker socket,
-changes Orchard security settings, or prunes unrelated engines/images.
+That matrix needs capacity for four running VMs (16 vCPUs, 32 GiB plus host
+overhead). Expect 15–30 minutes plus downloads. It checks distinct template MACs,
+engine IDs and transport keys and requires overlapping job intervals. Each child
+runs the full job/registry/SDK scope. Both child archives are included in its
+relative `test-results/...` archive. The native matrix has not been run here;
+it does not claim the broader pressure/fault matrix is complete.
+
+Unsupported combinations fail before provisioning.
+Tools are rebuilt from resolved c2j release source and recorded with the report.
+Each job includes deliberate waits for lease renewal, streaming and long API calls;
+allow several minutes per round plus builds/downloads and Java installation.
+
+The fixture checks transferred build context and `.dockerignore`, executable files,
+8 MiB binary archive copies including stopped containers, named volumes, tmpfs,
+Compose builds/network/health/ports/env_file, SDKs and Go/Java Testcontainers copies
+with normal cleanup helpers. A private registry checks synthetic credential use.
+Unsupported binds are observed, not universally rejected. Reports distinguish this
+focused scope from the full production contract, which remains incomplete.
+
+Archives and report paths are printed relative to `test-results/`. Do not run
+concurrent suites against a worker limited to two VM units. No host directories,
+shared filesystems or host Docker engine are used.
+
+## Historical filesystem experiment
+
+`./scripts/test-macos-docker-filesystem.sh` remains available to reproduce the
+14/16 coherence failures. It is outside the new contract. The old shared-workspace
+execution mode is disabled; neither delayed reads nor remounts are a workaround.
+
+## Requirements and reports
+
+The controller needs Go (the module toolchain), Python 3.9+, curl, tar and
+ssh-keygen, with access to GitHub/GHCR, Docker Hub, Ubuntu packages, Homebrew and
+Maven Central. Guest management uses the public disposable lab image login;
+production images need separate hardened management access. The Python Orchard
+harness targets the unauthenticated lab controller, not production authentication.
+
+`PULSE_TEST_C2J_VERSION` selects a release or commit; default `latest` resolves once
+and records the commit. `PULSE_TEST_TART_HOME` selects a local Tart home and
+`PULSE_TEST_SSH_PASSWORD` overrides the lab image password. For focused iteration,
+`--no-bind-platform linux` or `--no-bind-platform macos` explicitly narrows required
+coverage; omitted platforms stay unrun. The default is `both`.
+
+Each entry point snapshots source, records hashes/versions, captures logs and
+writes an ignored archive. Exit 2 means failed/incomplete requested coverage.
+Scoped success applies only to `required_cases`; `complete: false` means production
+acceptance remains outstanding. Older full/relay-only modes retain historical
+research coverage; use `--no-bind` for the current requirements.
 
 ## Cleanup and private state
 
@@ -140,7 +105,9 @@ are in a private temporary directory outside report archives. Its path is in
 python3 scripts/docker-prototype/cleanup.py /tmp/pulse-docker-private-REPLACE
 ```
 
-The command is repeatable and refuses changed identities. Keep that directory
+The command is repeatable and refuses changed identities. After successful VM
+cleanup it also stops recorded detached native endpoint helpers, verifying their
+process command and private state identity. Keep that directory
 private. After successful VM cleanup, remove it manually when inspection is
 finished; it may contain the test workspace and private credentials. Orchard
 API removal is verified, but host filesystem removal is not independently
@@ -166,23 +133,15 @@ production service: the harness owns teardown.
 
 `docker.NewMacOS` additionally takes the companion Guest/native identity and a
 per-allocation Workspace. Construction checks the concrete macOS version,
-primary resources, matching engine identity, and a primary/companion/container
-filesystem round-trip. c2j receives only the primary CPU/memory and concrete
+primary resources and matching engine identity through the authenticated relay.
+The workspace stays private to the primary; no cross-guest file probe runs. c2j receives only the primary CPU/memory and concrete
 macOS base. Both VMs appear in List with the same LaunchID/JobRef; the lease goes
 only to macOS. This remains a prepared-pair adapter, not an automatic pool.
 
 The macOS relay exposes a real local Unix socket and conventional
 `/var/run/docker.sock`. A fresh per-allocation SSH key and pinned engine host key
-protect the engine connection. When sibling networking is isolated, an explicit
-lab tunnel passes that end-to-end SSH stream through the external controller.
-It carries Docker traffic, not workspace files. A production worker-local
-transport is preferable. Container start success is gated on binding its
-published IPv4 TCP ports on macOS; conflicts fail the start and stop that
-container. UDP, reverse callbacks and full Docker compatibility are unfinished.
-
-The local Tart suite includes initial virtiofs visibility, filesystem primitives,
-host-directory replacement and suspend probes. It does not yet implement the
-full cross-guest filesystem/snapshot matrix in the full diagnostic suite. The focused suite now implements real macOS c2j
-execution and stable-root cold/suspended clones, pending the next Mac run. Orchard
-shared-workspace tests are blocked by missing scoped workspace provisioning and
-disabled hostDirs in the available lab. No SSHFS/NFS fallback was substituted.
+protect the engine connection. In the no-bind mode a worker-local endpoint carries
+that encrypted stream, without depending on the external controller process.
+Container start success is gated on binding its published IPv4 TCP ports on macOS;
+conflicts fail the start and stop that container. UDP, reverse callbacks and full
+Docker compatibility remain outside the qualified subset.

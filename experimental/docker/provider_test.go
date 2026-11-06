@@ -224,7 +224,7 @@ func TestUnreachableObservationIsError(t *testing.T) {
 	}
 }
 
-func TestMacOSAllocationVerifiesShareAndPreservesPrimaryFacts(t *testing.T) {
+func TestMacOSAllocationUsesPrivateWorkspaceAndPreservesPrimaryFacts(t *testing.T) {
 	var starts atomic.Int32
 	var checks atomic.Int32
 	var delivery atomic.Value
@@ -246,13 +246,13 @@ func TestMacOSAllocationVerifiesShareAndPreservesPrimaryFacts(t *testing.T) {
 	guest := Guest{VM: "primary", Address: addr, User: "admin", Password: "test"}
 	engine := guest
 	engine.VM = "companion"
-	cfg := Config{Enabled: true, StateDir: t.TempDir(), NativeID: "mac-uid", Base: "macos-tahoe-26.6.2-arm64", Image: "registry/image@sha256:" + strings.Repeat("a", 64), CPU: 4, MemoryMiB: 7680, Guest: guest, Engine: engine, EngineNativeID: "engine-uid", Workspace: "/Users/Shared/pulse/work/jobs/owned"}
+	cfg := Config{Enabled: true, StateDir: t.TempDir(), NativeID: "mac-uid", Base: "macos-tahoe-26.6.2-arm64", Image: "registry/image@sha256:" + strings.Repeat("a", 64), CPU: 4, MemoryMiB: 7680, Guest: guest, Engine: engine, EngineNativeID: "engine-uid", Workspace: "/Users/pulseworker/work/owned"}
 	p, err := NewMacOS(t.Context(), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if checks.Load() != 3 {
-		t.Fatal("missing shared workspace round-trip", checks.Load())
+	if checks.Load() != 0 {
+		t.Fatal("unexpected shared workspace operation", checks.Load())
 	}
 	before := checks.Load()
 	caps, err := p.GetCapabilities(t.Context())

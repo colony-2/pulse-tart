@@ -11,18 +11,23 @@ harness owns VM provisioning and cleanup. No default provider behavior changes.
 
 ```sh
 go test -race ./experimental/docker/...
-./scripts/test-docker-prototype.sh tart
-./scripts/test-docker-prototype.sh orchard
+./scripts/test-docker-prototype.sh tart --no-bind
+./scripts/test-docker-prototype.sh orchard --no-bind
 ```
 
 Live suites deliberately exit 2 while required coverage is failed or incomplete.
 
-The new focused Mac path runs real c2j leases on a shared workspace:
+The focused path runs real c2j leases on native private workspaces, transfers
+build contexts and archives, and uses engine-owned volumes. Runtime job-path bind
+mounts are outside the supported contract:
 
 ```sh
 ./scripts/test-macos-docker.sh
-./scripts/test-macos-docker.sh --lifecycle suspended
+./scripts/test-macos-docker.sh --no-bind-platform macos --rounds 1
 ```
 
 Focused success applies only to the report's explicit `required_cases`; full
 production readiness is still reported separately as `complete: false`.
+
+The [implementation plan](../../docs/docker-capability-plan.md) separates the
+selected design from remaining snapshot/concurrency/recovery/pressure gates.

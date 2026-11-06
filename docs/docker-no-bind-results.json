@@ -1,0 +1,796 @@
+{
+  "schema": 1,
+  "date": "2026-11-06",
+  "contract": "Docker without job-path bind mounts",
+  "production_ready": false,
+  "design": "native primary workspace, private Engine, worker endpoint carrying allocation SSH",
+  "source_reports": [
+    {
+      "scope": "no-bind",
+      "result": "incomplete",
+      "build": {
+        "c2j_selection": "v0.0.121",
+        "c2j_commit": "c14acfe7629eacb9e0ab3425f61d574748447819"
+      },
+      "docker_clients": {
+        "docker-darwin": {
+          "version": "28.5.1",
+          "sha256": "88f62be37ddb6c7b06e62fef544fcb518756f898df0f1096f2fc978d62621c95"
+        },
+        "docker-buildx-darwin": {
+          "version": "0.30.1",
+          "sha256": "bd5190d798c4714b57d44688a67d8a6fd1aaf8accc5da145a169cf406bb793ea"
+        },
+        "docker-compose-darwin": {
+          "version": "2.40.3",
+          "sha256": "8cd7eb5f95bacb536cc407111662e2c205d67d9abfea5dcb8400be8418db60d1"
+        }
+      },
+      "samples": [
+        {
+          "vm": "pulse-docker-2ffa24079723-g0-linux",
+          "cold_prepare_seconds": 31.87429368100129
+        },
+        {
+          "vm": "pulse-docker-2ffa24079723-g0-linux",
+          "job_seconds": 132.23135651799385,
+          "exit": "0",
+          "jobdb": {
+            "status": "COMPLETED",
+            "output_ok": true,
+            "claims": 1,
+            "renewals": 8,
+            "secret_calls": 1
+          }
+        },
+        {
+          "vm": "pulse-docker-2ffa24079723-g0-linux",
+          "cleanup_seconds": 2.0379802089883015
+        },
+        {
+          "vm": "pulse-docker-2ffa24079723-g0-engine",
+          "cold_prepare_seconds": 27.0283020119532
+        },
+        {
+          "vm": "pulse-docker-2ffa24079723-g0-mac",
+          "cleanup_seconds": 2.0331788340117782
+        },
+        {
+          "vm": "pulse-docker-2ffa24079723-g0-engine",
+          "cleanup_seconds": 4.050658666994423
+        }
+      ],
+      "run_error": "authenticated Docker relay timed out: Command failed; see command-failure-05688c54.log",
+      "controller": {
+        "version": "unknown",
+        "commit": "unknown",
+        "capabilities": [
+          "rpc-v1",
+          "vm-state-endpoint"
+        ]
+      },
+      "engine_data_path": "Orchard worker endpoint to allocation-only SSH service; independent of provider/controller process.",
+      "id": "20261106T205401Z-docker-orchard-82474",
+      "cases": {
+        "macos_authenticated_api": {
+          "description": "Allocation-scoped authenticated bridge and conventional Unix socket",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "macos_tcp_ports": {
+          "description": "Fixed/dynamic loopback and wildcard publications reach macOS localhost",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "macos_start_gate": {
+          "description": "Start completion waits for relay binding; no registration sleeps",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "macos_port_conflicts": {
+          "description": "Local port conflict is detected and reported",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "macos_relay_recovery": {
+          "description": "Relay restart discovers existing publications and restores forwarding",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_linux_job": {
+          "description": "no_bind_linux_job",
+          "status": "passed",
+          "reason": "Real lease/base/capability checks, build context, .dockerignore, 8 MiB binary archive roundtrip, executable bit, named volume, tmpfs, streaming, Compose, unsupported bind observation.",
+          "generations": 1
+        },
+        "no_bind_macos_job": {
+          "description": "no_bind_macos_job",
+          "status": "failed",
+          "reason": "See worker/contract/command logs."
+        },
+        "no_bind_macos_sdk": {
+          "description": "no_bind_macos_sdk",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_macos_java": {
+          "description": "no_bind_macos_java",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_controller_independence": {
+          "description": "no_bind_controller_independence",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        }
+      }
+    },
+    {
+      "scope": "no-bind",
+      "result": "incomplete",
+      "build": {
+        "c2j_selection": "v0.0.122",
+        "c2j_commit": "483cb48a328ea58fe8c231b8a4e3a1c11bf39422"
+      },
+      "docker_clients": {
+        "docker-darwin": {
+          "version": "28.5.1",
+          "sha256": "f1cdb7fab00c14f0296ca7e424a68d41283d48bc893c6cbc42c310356b7ed637"
+        },
+        "docker-buildx-darwin": {
+          "version": "0.30.1",
+          "sha256": "eeb8de05407f1a37f7b9c5a904b80b4edbe61ce1f25691eba9a17dab919ea565"
+        },
+        "docker-compose-darwin": {
+          "version": "2.40.3",
+          "sha256": "8cd7eb5f95bacb536cc407111662e2c205d67d9abfea5dcb8400be8418db60d1"
+        }
+      },
+      "samples": [
+        {
+          "vm": "pulse-docker-e3e942b2cde6-g0-linux",
+          "cold_prepare_seconds": 28.79328159702709
+        },
+        {
+          "vm": "pulse-docker-e3e942b2cde6-g0-linux",
+          "job_seconds": 167.22277682594722,
+          "exit": "0",
+          "jobdb": {
+            "status": "COMPLETED",
+            "output_ok": true,
+            "claims": 1,
+            "renewals": 10,
+            "secret_calls": 1
+          }
+        },
+        {
+          "vm": "pulse-docker-e3e942b2cde6-g0-linux",
+          "cleanup_seconds": 4.0482470850110985
+        },
+        {
+          "vm": "pulse-docker-e3e942b2cde6-g0-engine",
+          "cold_prepare_seconds": 30.256537306006067
+        },
+        {
+          "vm": "pulse-docker-e3e942b2cde6-g0-mac",
+          "cleanup_seconds": 6.053332503011916
+        },
+        {
+          "vm": "pulse-docker-e3e942b2cde6-g0-engine",
+          "cleanup_seconds": 4.0535308349644765
+        }
+      ],
+      "run_error": "Command failed; see command-failure-0c8ab755.log",
+      "controller": {
+        "version": "unknown",
+        "commit": "unknown",
+        "capabilities": [
+          "rpc-v1",
+          "vm-state-endpoint"
+        ]
+      },
+      "engine_data_path": "Orchard worker endpoint to allocation-only SSH service; independent of provider/controller process.",
+      "id": "20261106T210026Z-docker-orchard-95063",
+      "cases": {
+        "macos_authenticated_api": {
+          "description": "Allocation-scoped authenticated bridge and conventional Unix socket",
+          "status": "passed",
+          "reason": "Per-allocation SSH key, pinned engine host key, real macOS Unix socket including conventional /var/run/docker.sock. Public admin image credentials remain a lab limitation."
+        },
+        "macos_tcp_ports": {
+          "description": "Fixed/dynamic loopback and wildcard publications reach macOS localhost",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "macos_start_gate": {
+          "description": "Start completion waits for relay binding; no registration sleeps",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "macos_port_conflicts": {
+          "description": "Local port conflict is detected and reported",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "macos_relay_recovery": {
+          "description": "Relay restart discovers existing publications and restores forwarding",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_linux_job": {
+          "description": "no_bind_linux_job",
+          "status": "passed",
+          "reason": "Real lease/base/capability checks, build context, .dockerignore, 8 MiB binary archive roundtrip, executable bit, named volume, tmpfs, streaming, Compose, unsupported bind observation.",
+          "generations": 1
+        },
+        "no_bind_macos_job": {
+          "description": "no_bind_macos_job",
+          "status": "failed",
+          "reason": "See worker/contract/command logs."
+        },
+        "no_bind_macos_sdk": {
+          "description": "no_bind_macos_sdk",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_macos_java": {
+          "description": "no_bind_macos_java",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_registry": {
+          "description": "no_bind_registry",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_controller_independence": {
+          "description": "no_bind_controller_independence",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        }
+      }
+    },
+    {
+      "scope": "no-bind-macos",
+      "result": "incomplete",
+      "build": {
+        "c2j_selection": "v0.0.122",
+        "c2j_commit": "483cb48a328ea58fe8c231b8a4e3a1c11bf39422"
+      },
+      "docker_clients": {
+        "docker-darwin": {
+          "version": "28.5.1",
+          "sha256": "4b64aa4a46f3409e69be952d509c89de1ee7eea95a186de07cc6dad9a3f4a1e0"
+        },
+        "docker-buildx-darwin": {
+          "version": "0.30.1",
+          "sha256": "f0e599adeb39337227191f67e0a1f23e1042b7f779a4c641537e11cb99f4a293"
+        },
+        "docker-compose-darwin": {
+          "version": "2.40.3",
+          "sha256": "8cd7eb5f95bacb536cc407111662e2c205d67d9abfea5dcb8400be8418db60d1"
+        }
+      },
+      "samples": [
+        {
+          "vm": "pulse-docker-8ac40ea1c739-g0-engine",
+          "cold_prepare_seconds": 29.310953055042773
+        },
+        {
+          "vm": "pulse-docker-8ac40ea1c739-g0-mac",
+          "cold_ssh_seconds": 16.799371882982086,
+          "cold_prepare_seconds": 26.495659136970062
+        },
+        {
+          "vm": "pulse-docker-8ac40ea1c739-g0-mac",
+          "cleanup_seconds": 2.029864417971112
+        },
+        {
+          "vm": "pulse-docker-8ac40ea1c739-g0-engine",
+          "cleanup_seconds": 4.043616169015877
+        }
+      ],
+      "run_error": "Command failed; see command-failure-4a7629a5.log",
+      "controller": {
+        "version": "unknown",
+        "commit": "unknown",
+        "capabilities": [
+          "rpc-v1",
+          "vm-state-endpoint"
+        ]
+      },
+      "engine_data_path": "Worker endpoint to allocation-only SSH service; independent of one-shot provider processes.",
+      "id": "20261106T210600Z-docker-orchard-8041",
+      "cases": {
+        "macos_authenticated_api": {
+          "description": "Allocation-scoped authenticated bridge and conventional Unix socket",
+          "status": "passed",
+          "reason": "Per-allocation SSH key, pinned engine host key, real macOS Unix socket including conventional /var/run/docker.sock. Public admin image credentials remain a lab limitation."
+        },
+        "macos_tcp_ports": {
+          "description": "Fixed/dynamic loopback and wildcard publications reach macOS localhost",
+          "status": "passed",
+          "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+        },
+        "macos_start_gate": {
+          "description": "Start completion waits for relay binding; no registration sleeps",
+          "status": "passed",
+          "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+        },
+        "macos_port_conflicts": {
+          "description": "Local port conflict is detected and reported",
+          "status": "passed",
+          "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+        },
+        "macos_relay_recovery": {
+          "description": "Relay restart discovers existing publications and restores forwarding",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_linux_job": {
+          "description": "no_bind_linux_job",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_macos_job": {
+          "description": "no_bind_macos_job",
+          "status": "failed",
+          "reason": "See worker/contract/command logs."
+        },
+        "no_bind_macos_sdk": {
+          "description": "no_bind_macos_sdk",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_macos_java": {
+          "description": "no_bind_macos_java",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_registry": {
+          "description": "no_bind_registry",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_controller_independence": {
+          "description": "no_bind_controller_independence",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        }
+      }
+    },
+    {
+      "scope": "no-bind-macos",
+      "result": "incomplete",
+      "build": {
+        "c2j_selection": "v0.0.122",
+        "c2j_commit": "483cb48a328ea58fe8c231b8a4e3a1c11bf39422"
+      },
+      "docker_clients": {
+        "docker-darwin": {
+          "version": "28.5.1",
+          "sha256": "07210c906220c73f977b565a6963976d37e349521fb1a8b05e40662fc5cbfe88"
+        },
+        "docker-buildx-darwin": {
+          "version": "0.30.1",
+          "sha256": "bb6e419270350bbdbb53371bf4e5d528567fd41e49337487b0e1a60bc0c66acd"
+        },
+        "docker-compose-darwin": {
+          "version": "2.40.3",
+          "sha256": "8cd7eb5f95bacb536cc407111662e2c205d67d9abfea5dcb8400be8418db60d1"
+        }
+      },
+      "samples": [
+        {
+          "vm": "pulse-docker-22382c5e9f06-g0-engine",
+          "cold_prepare_seconds": 34.784814807004295
+        },
+        {
+          "vm": "pulse-docker-22382c5e9f06-g0-mac",
+          "cold_ssh_seconds": 14.16208454896696,
+          "cold_prepare_seconds": 33.239114640979096
+        },
+        {
+          "vm": "pulse-docker-22382c5e9f06-g0-mac",
+          "job_seconds": 166.64691874297569,
+          "exit": "0",
+          "jobdb": {
+            "status": "COMPLETED",
+            "output_ok": true,
+            "claims": 1,
+            "renewals": 10,
+            "secret_calls": 1
+          }
+        },
+        {
+          "vm": "pulse-docker-22382c5e9f06-g0-mac",
+          "cleanup_seconds": 2.0288273760234006
+        },
+        {
+          "vm": "pulse-docker-22382c5e9f06-g0-engine",
+          "cleanup_seconds": 4.033198585035279
+        }
+      ],
+      "run_error": "Command failed; see command-failure-eafaf3fa.log",
+      "controller": {
+        "version": "unknown",
+        "commit": "unknown",
+        "capabilities": [
+          "rpc-v1",
+          "vm-state-endpoint"
+        ]
+      },
+      "engine_data_path": "Worker endpoint to allocation-only SSH service; independent of one-shot provider processes.",
+      "id": "20261106T210854Z-docker-orchard-20073",
+      "cases": {
+        "macos_authenticated_api": {
+          "description": "Allocation-scoped authenticated bridge and conventional Unix socket",
+          "status": "passed",
+          "reason": "Per-allocation SSH key, pinned engine host key, real macOS Unix socket including conventional /var/run/docker.sock. Public admin image credentials remain a lab limitation."
+        },
+        "macos_tcp_ports": {
+          "description": "Fixed/dynamic loopback and wildcard publications reach macOS localhost",
+          "status": "passed",
+          "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+        },
+        "macos_start_gate": {
+          "description": "Start completion waits for relay binding; no registration sleeps",
+          "status": "passed",
+          "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+        },
+        "macos_port_conflicts": {
+          "description": "Local port conflict is detected and reported",
+          "status": "passed",
+          "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+        },
+        "macos_relay_recovery": {
+          "description": "Relay restart discovers existing publications and restores forwarding",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_linux_job": {
+          "description": "no_bind_linux_job",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_macos_job": {
+          "description": "no_bind_macos_job",
+          "status": "passed",
+          "reason": "Real macOS c2j lease with native private checkout; supported no-bind contract and replay passed.",
+          "generations": 1
+        },
+        "no_bind_macos_sdk": {
+          "description": "no_bind_macos_sdk",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_macos_java": {
+          "description": "no_bind_macos_java",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_registry": {
+          "description": "no_bind_registry",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_controller_independence": {
+          "description": "no_bind_controller_independence",
+          "status": "passed",
+          "reason": "Worker endpoint carries guest-to-engine SSH. No controller tunnel process was created; one-shot provider processes closed and reopened while job continued. Worker/controller service crash remains separate."
+        }
+      }
+    },
+    {
+      "scope": "no-bind-macos",
+      "result": "incomplete",
+      "build": {
+        "c2j_selection": "v0.0.122",
+        "c2j_commit": "483cb48a328ea58fe8c231b8a4e3a1c11bf39422"
+      },
+      "docker_clients": {
+        "docker-darwin": {
+          "version": "28.5.1",
+          "sha256": "356d72d13548db4a287fdeb8549c92069333c1ef99a4e24110a6729db039ef2b"
+        },
+        "docker-buildx-darwin": {
+          "version": "0.30.1",
+          "sha256": "c692b5456654d34acb00c608e16d7e2b112485e6b198a2ee214fbd1dc564d938"
+        },
+        "docker-compose-darwin": {
+          "version": "2.40.3",
+          "sha256": "8cd7eb5f95bacb536cc407111662e2c205d67d9abfea5dcb8400be8418db60d1"
+        }
+      },
+      "samples": [
+        {
+          "vm": "pulse-docker-0bdedbd1c6b0-g0-engine",
+          "cold_prepare_seconds": 29.370165597007144
+        },
+        {
+          "vm": "pulse-docker-0bdedbd1c6b0-g0-mac",
+          "cold_ssh_seconds": 15.261247881979216,
+          "cold_prepare_seconds": 25.989410428970587
+        },
+        {
+          "vm": "pulse-docker-0bdedbd1c6b0-g0-mac",
+          "cleanup_seconds": 4.032131501997355
+        },
+        {
+          "vm": "pulse-docker-0bdedbd1c6b0-g0-engine",
+          "cleanup_seconds": 6.04883400304243
+        }
+      ],
+      "run_error": "Command failed; see command-failure-904c078e.log",
+      "controller": {
+        "version": "unknown",
+        "commit": "unknown",
+        "capabilities": [
+          "rpc-v1",
+          "vm-state-endpoint"
+        ]
+      },
+      "engine_data_path": "Worker endpoint to allocation-only SSH service; independent of one-shot provider processes.",
+      "id": "20261106T211516Z-docker-orchard-32319",
+      "cases": {
+        "macos_authenticated_api": {
+          "description": "Allocation-scoped authenticated bridge and conventional Unix socket",
+          "status": "passed",
+          "reason": "Per-allocation SSH key, pinned engine host key, real macOS Unix socket including conventional /var/run/docker.sock. Public admin image credentials remain a lab limitation."
+        },
+        "macos_tcp_ports": {
+          "description": "Fixed/dynamic loopback and wildcard publications reach macOS localhost",
+          "status": "passed",
+          "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+        },
+        "macos_start_gate": {
+          "description": "Start completion waits for relay binding; no registration sleeps",
+          "status": "passed",
+          "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+        },
+        "macos_port_conflicts": {
+          "description": "Local port conflict is detected and reported",
+          "status": "passed",
+          "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+        },
+        "macos_relay_recovery": {
+          "description": "Relay restart discovers existing publications and restores forwarding",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_linux_job": {
+          "description": "no_bind_linux_job",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_macos_sdk": {
+          "description": "no_bind_macos_sdk",
+          "status": "passed",
+          "reason": "Official Docker Python SDK 7.1.0, concurrent requests, run API; Go Testcontainers with Ryuk passed in relay tests."
+        },
+        "no_bind_macos_java": {
+          "description": "no_bind_macos_java",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_registry": {
+          "description": "no_bind_registry",
+          "status": "passed",
+          "reason": "Synthetic task credentials: login, push, delete local tag, authenticated pull, run, logout and denied pull; registry is private to allocation."
+        },
+        "no_bind_unsupported": {
+          "description": "no_bind_unsupported",
+          "status": "passed",
+          "reason": "Observed host-path volumes, local file-backed secrets/configs and disguised driver binds without primary data exposure. No universal rejection claim."
+        }
+      },
+      "evidence_correction": "Extras-only run skipped c2j. Raw no_bind_macos_job and no_bind_controller_independence fields are invalid and excluded; harness corrected subsequently."
+    },
+    {
+      "scope": "no-bind-macos",
+      "result": "passed",
+      "build": {
+        "c2j_selection": "v0.0.122",
+        "c2j_commit": "483cb48a328ea58fe8c231b8a4e3a1c11bf39422"
+      },
+      "docker_clients": {
+        "docker-darwin": {
+          "version": "28.5.1",
+          "sha256": "efe72b896bc82a840d69fbca4115648c77e357ebbbb57044f3d8a0ceabf47291"
+        },
+        "docker-buildx-darwin": {
+          "version": "0.30.1",
+          "sha256": "d8bba018d89da2d0d3785d058c0a274996999f4c77c729bf26d28094550d0825"
+        },
+        "docker-compose-darwin": {
+          "version": "2.40.3",
+          "sha256": "8cd7eb5f95bacb536cc407111662e2c205d67d9abfea5dcb8400be8418db60d1"
+        }
+      },
+      "samples": [
+        {
+          "vm": "pulse-docker-7a04b6150930-g0-engine",
+          "cold_prepare_seconds": 29.203152014000807
+        },
+        {
+          "vm": "pulse-docker-7a04b6150930-g0-mac",
+          "cold_ssh_seconds": 16.601956382975914,
+          "cold_prepare_seconds": 26.166568387008738
+        },
+        {
+          "vm": "pulse-docker-7a04b6150930-g0-mac",
+          "cleanup_seconds": 4.039614668989088
+        },
+        {
+          "vm": "pulse-docker-7a04b6150930-g0-engine",
+          "cleanup_seconds": 6.037331878033001
+        }
+      ],
+      "controller": {
+        "version": "unknown",
+        "commit": "unknown",
+        "capabilities": [
+          "rpc-v1",
+          "vm-state-endpoint"
+        ]
+      },
+      "engine_data_path": "Worker endpoint to allocation-only SSH service; independent of one-shot provider processes.",
+      "id": "20261106T211953Z-docker-orchard-43781",
+      "cases": {
+        "macos_authenticated_api": {
+          "description": "Allocation-scoped authenticated bridge and conventional Unix socket",
+          "status": "passed",
+          "reason": "Per-allocation SSH key, pinned engine host key, real macOS Unix socket including conventional /var/run/docker.sock. Public admin image credentials remain a lab limitation."
+        },
+        "macos_tcp_ports": {
+          "description": "Fixed/dynamic loopback and wildcard publications reach macOS localhost",
+          "status": "passed",
+          "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+        },
+        "macos_start_gate": {
+          "description": "Start completion waits for relay binding; no registration sleeps",
+          "status": "passed",
+          "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+        },
+        "macos_port_conflicts": {
+          "description": "Local port conflict is detected and reported",
+          "status": "passed",
+          "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+        },
+        "macos_relay_recovery": {
+          "description": "Relay restart discovers existing publications and restores forwarding",
+          "status": "passed",
+          "reason": "Force-killed relay reconnected and rediscovered preexisting Linux publication at localhost:18080."
+        },
+        "no_bind_linux_job": {
+          "description": "no_bind_linux_job",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_macos_job": {
+          "description": "no_bind_macos_job",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        },
+        "no_bind_macos_sdk": {
+          "description": "no_bind_macos_sdk",
+          "status": "passed",
+          "reason": "Official Docker Python SDK 7.1.0, concurrent requests, run API; Go Testcontainers with Ryuk passed in relay tests."
+        },
+        "no_bind_macos_java": {
+          "description": "no_bind_macos_java",
+          "status": "passed",
+          "reason": "Java Testcontainers 2.0.5, copied fixture and TCP service, normal Ryuk enabled."
+        },
+        "no_bind_registry": {
+          "description": "no_bind_registry",
+          "status": "passed",
+          "reason": "Synthetic task credentials: login, push, delete local tag, authenticated pull, run, logout and denied pull; private registry."
+        },
+        "no_bind_unsupported": {
+          "description": "no_bind_unsupported",
+          "status": "passed",
+          "reason": "Host volumes, file-backed secrets/configs and disguised driver binds do not expose primary files. No universal rejection claim."
+        },
+        "no_bind_controller_independence": {
+          "description": "no_bind_controller_independence",
+          "status": "not_run",
+          "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+        }
+      }
+    }
+  ],
+  "qualified_cases": {
+    "no_bind_linux_job": {
+      "evidence": "20261106T210026Z-docker-orchard-95063",
+      "reason": "Real lease/base/capability checks, build context, .dockerignore, 8 MiB binary archive roundtrip, executable bit, named volume, tmpfs, streaming, Compose, unsupported bind observation."
+    },
+    "macos_authenticated_api": {
+      "evidence": "20261106T211953Z-docker-orchard-43781",
+      "reason": "Per-allocation SSH key, pinned engine host key, real macOS Unix socket including conventional /var/run/docker.sock. Public admin image credentials remain a lab limitation."
+    },
+    "macos_tcp_ports": {
+      "evidence": "20261106T211953Z-docker-orchard-43781",
+      "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+    },
+    "macos_start_gate": {
+      "evidence": "20261106T211953Z-docker-orchard-43781",
+      "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+    },
+    "macos_port_conflicts": {
+      "evidence": "20261106T211953Z-docker-orchard-43781",
+      "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+    },
+    "no_bind_macos_job": {
+      "evidence": "20261106T210854Z-docker-orchard-20073",
+      "reason": "Real macOS c2j lease with native private checkout; supported no-bind contract and replay passed."
+    },
+    "no_bind_controller_independence": {
+      "evidence": "20261106T210854Z-docker-orchard-20073",
+      "reason": "Worker endpoint carries guest-to-engine SSH. No controller tunnel process was created; one-shot provider processes closed and reopened while job continued. Worker/controller service crash remains separate."
+    },
+    "no_bind_macos_sdk": {
+      "evidence": "20261106T211953Z-docker-orchard-43781",
+      "reason": "Official Docker Python SDK 7.1.0, concurrent requests, run API; Go Testcontainers with Ryuk passed in relay tests."
+    },
+    "no_bind_registry": {
+      "evidence": "20261106T211953Z-docker-orchard-43781",
+      "reason": "Synthetic task credentials: login, push, delete local tag, authenticated pull, run, logout and denied pull; private registry."
+    },
+    "no_bind_unsupported": {
+      "evidence": "20261106T211953Z-docker-orchard-43781",
+      "reason": "Host volumes, file-backed secrets/configs and disguised driver binds do not expose primary files. No universal rejection claim."
+    },
+    "macos_relay_recovery": {
+      "evidence": "20261106T211953Z-docker-orchard-43781",
+      "reason": "Force-killed relay reconnected and rediscovered preexisting Linux publication at localhost:18080."
+    },
+    "no_bind_macos_java": {
+      "evidence": "20261106T211953Z-docker-orchard-43781",
+      "reason": "Java Testcontainers 2.0.5, copied fixture and TCP service, normal Ryuk enabled."
+    }
+  },
+  "remaining_gates": [
+    "native Tart frontend",
+    "two suspended generations per slot",
+    "two simultaneous macOS/Linux pairs",
+    "durable paired allocation/reaper faults",
+    "CPU/memory/private-disk pressure",
+    "endpoint recreation and service supervision"
+  ],
+  "unsupported_compose": {
+    "host-volume": {
+      "up_exit": 0,
+      "primary_marker_visible": false,
+      "observation": "container ran without primary file contents"
+    },
+    "file-secret": {
+      "up_exit": 1,
+      "primary_marker_visible": false,
+      "observation": "daemon rejected setup"
+    },
+    "file-config": {
+      "up_exit": 1,
+      "primary_marker_visible": false,
+      "observation": "daemon rejected setup"
+    },
+    "driver-bind": {
+      "up_exit": 1,
+      "primary_marker_visible": false,
+      "observation": "daemon rejected setup"
+    }
+  },
+  "qualified_versions": {
+    "c2j": "v0.0.122",
+    "c2j_commit": "483cb48a328ea58fe8c231b8a4e3a1c11bf39422",
+    "engine": "29.1.3",
+    "docker_cli_darwin": "28.5.1",
+    "buildx": "0.30.1",
+    "compose": "2.40.3",
+    "testcontainers_go": "0.45.0",
+    "testcontainers_java": "2.0.5",
+    "docker_python_sdk": "7.1.0",
+    "controller_version": "unknown",
+    "controller_commit": "unknown"
+  }
+}

@@ -3,7 +3,6 @@ package docker
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -60,11 +59,14 @@ func NewLinux(ctx context.Context, c Config) (*Provider, error) {
 }
 
 // NewMacOS verifies a prepared macOS primary, its private Linux companion and
-// their shared workspace before advertising Docker. Provisioning is owned by
+// the relayed engine identity before advertising Docker. Provisioning is owned by
 // the experimental harness. No lease is delivered to the companion.
 func NewMacOS(ctx context.Context, c Config) (*Provider, error) {
 	c.platform = "darwin"
-	if c.EngineNativeID == "" || c.Engine.VM == "" || c.Engine.VM == c.Guest.VM || !regexp.MustCompile(`^/Users/Shared/pulse/work/jobs/[A-Za-z0-9_-]+$`).MatchString(c.Workspace) {
+	if c.Workspace == "" {
+		c.Workspace = "/Users/pulseworker/work"
+	}
+	if c.EngineNativeID == "" || c.Engine.VM == "" || c.Engine.VM == c.Guest.VM || (c.Workspace != "" && !regexp.MustCompile(`^/Users/pulseworker/work(?:/[A-Za-z0-9_-]+)*$`).MatchString(c.Workspace)) {
 		return nil, fmt.Errorf("invalid macOS paired allocation")
 	}
 	return newAllocation(ctx, c)
@@ -138,23 +140,6 @@ func newAllocation(ctx context.Context, c Config) (*Provider, error) {
 		if err != nil || len(primaryIDs) != 2 || strings.TrimSpace(engineIdentity.String()) != primaryIDs[1] {
 			p.Close()
 			return nil, fmt.Errorf("primary relay does not identify the configured private engine")
-		}
-		token := make([]byte, 16)
-		if _, err = rand.Read(token); err != nil {
-			p.Close()
-			return nil, err
-		}
-		nonce := hex.EncodeToString(token)
-		for _, step := range []struct {
-			guest Guest
-			mode  string
-		}{{c.Guest, "write"}, {c.Engine, "engine"}, {c.Guest, "finish"}} {
-			command := "sudo -u pulseworker env HOME=/Users/pulseworker PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/python3 /opt/pulse-docker/check-workspace.py " + step.mode + " " + c.Workspace + " " + nonce
-			diagnostics.Reset()
-			if err = step.guest.Exec(ctx, command, nil, io.Discard, &diagnostics); err != nil {
-				p.Close()
-				return nil, verificationFailure("shared workspace/container verification failed at "+step.mode, "PULSE_WORKSPACE_FAILED=", diagnostics.String())
-			}
 		}
 	}
 	identityFile := filepath.Join(c.StateDir, "engine-identity")

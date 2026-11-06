@@ -39,7 +39,7 @@ func NewRelay(parent context.Context, dial func(context.Context, string, string)
 	ctx, cancel := context.WithCancel(parent)
 	tr := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return dial(ctx, "unix", "/var/run/docker.sock")
-	}, ResponseHeaderTimeout: 30 * time.Second}
+	}}
 	return &Relay{transport: tr, client: &http.Client{Transport: tr, Timeout: 30 * time.Second}, dial: dial, ports: map[string]net.Listener{}, ctx: ctx, cancel: cancel}
 }
 func (r *Relay) Close() {

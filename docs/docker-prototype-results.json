@@ -711,5 +711,233 @@
     "cleanup_errors": [],
     "run_error": null,
     "interpretation": "Basic shared visibility and macOS suspension passed; mounted-directory replacement failed. Resume/retarget and actual macOS c2j shared worktree remain untested. macOS xattr probe has a Python portability defect."
+  },
+  "filesystem_coherence_followup": {
+    "evidence": "20261106T202438Z-docker-tart-5740",
+    "result": "failed",
+    "host_os": "ProductName:\t\tmacOS\nProductVersion:\t\t26.7.2\nBuildVersion:\t\t25G332\n",
+    "tart_version": "2.41.1\n",
+    "guest_versions": {
+      "macos": "ProductName:\t\tmacOS\nProductVersion:\t\t26.6.2\nBuildVersion:\t\t25G83\nDarwin Manageds-Virtual-Machine.local 25.6.0 Darwin Kernel Version 25.6.0: Fri Jul 31 19:16:43 PDT 2026; root:xnu-12377.161.14~5/RELEASE_ARM64_VMAPPLE arm64\nPython 3.9.6\n",
+      "linux": "Linux ubuntu 7.0.0-42-generic #42~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Mon Oct 19 15:32:40 UTC 2 aarch64 aarch64 aarch64 GNU/Linux\nPRETTY_NAME=\"Ubuntu 24.04.5 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.5 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo\nPython 3.12.3\n"
+    },
+    "cases": 16,
+    "failed_first_reads": 14,
+    "all_baselines_valid": true,
+    "host_and_writer_contents_correct_in_all_cases": true,
+    "observations": [
+      {
+        "reader": "macos",
+        "writer": "linux",
+        "origin": "macos",
+        "variant": "same_size_close",
+        "status": "failed",
+        "first_read": {
+          "status": "ok",
+          "length": 32,
+          "stat_size": 32
+        },
+        "first_matching_sample_seconds": null
+      },
+      {
+        "reader": "macos",
+        "writer": "linux",
+        "origin": "macos",
+        "variant": "grow_close",
+        "status": "failed",
+        "first_read": {
+          "status": "ok",
+          "length": 64,
+          "stat_size": 64
+        },
+        "first_matching_sample_seconds": null
+      },
+      {
+        "reader": "macos",
+        "writer": "linux",
+        "origin": "macos",
+        "variant": "grow_fsync",
+        "status": "failed",
+        "first_read": {
+          "status": "ok",
+          "length": 64,
+          "stat_size": 64
+        },
+        "first_matching_sample_seconds": null
+      },
+      {
+        "reader": "macos",
+        "writer": "linux",
+        "origin": "macos",
+        "variant": "atomic_replace",
+        "status": "failed",
+        "first_read": {
+          "status": "error",
+          "error": "FileNotFoundError",
+          "errno": 2
+        },
+        "first_matching_sample_seconds": null
+      },
+      {
+        "reader": "macos",
+        "writer": "linux",
+        "origin": "linux",
+        "variant": "same_size_close",
+        "status": "failed",
+        "first_read": {
+          "status": "ok",
+          "length": 32,
+          "stat_size": 32
+        },
+        "first_matching_sample_seconds": null
+      },
+      {
+        "reader": "macos",
+        "writer": "linux",
+        "origin": "linux",
+        "variant": "grow_close",
+        "status": "failed",
+        "first_read": {
+          "status": "ok",
+          "length": 64,
+          "stat_size": 64
+        },
+        "first_matching_sample_seconds": null
+      },
+      {
+        "reader": "macos",
+        "writer": "linux",
+        "origin": "linux",
+        "variant": "grow_fsync",
+        "status": "failed",
+        "first_read": {
+          "status": "ok",
+          "length": 64,
+          "stat_size": 64
+        },
+        "first_matching_sample_seconds": null
+      },
+      {
+        "reader": "macos",
+        "writer": "linux",
+        "origin": "linux",
+        "variant": "atomic_replace",
+        "status": "failed",
+        "first_read": {
+          "status": "error",
+          "error": "FileNotFoundError",
+          "errno": 2
+        },
+        "first_matching_sample_seconds": null
+      },
+      {
+        "reader": "linux",
+        "writer": "macos",
+        "origin": "linux",
+        "variant": "same_size_close",
+        "status": "passed",
+        "first_read": {
+          "status": "ok",
+          "length": 32,
+          "stat_size": 32
+        },
+        "first_matching_sample_seconds": 0.00038428700000281424
+      },
+      {
+        "reader": "linux",
+        "writer": "macos",
+        "origin": "linux",
+        "variant": "grow_close",
+        "status": "failed",
+        "first_read": {
+          "status": "ok",
+          "length": 32,
+          "stat_size": 64
+        },
+        "first_matching_sample_seconds": 0.10076215400000166
+      },
+      {
+        "reader": "linux",
+        "writer": "macos",
+        "origin": "linux",
+        "variant": "grow_fsync",
+        "status": "failed",
+        "first_read": {
+          "status": "ok",
+          "length": 32,
+          "stat_size": 64
+        },
+        "first_matching_sample_seconds": 0.10164763799999577
+      },
+      {
+        "reader": "linux",
+        "writer": "macos",
+        "origin": "linux",
+        "variant": "atomic_replace",
+        "status": "failed",
+        "first_read": {
+          "status": "error",
+          "error": "FileNotFoundError",
+          "errno": 2
+        },
+        "first_matching_sample_seconds": 0.10570028100000428
+      },
+      {
+        "reader": "linux",
+        "writer": "macos",
+        "origin": "macos",
+        "variant": "same_size_close",
+        "status": "passed",
+        "first_read": {
+          "status": "ok",
+          "length": 32,
+          "stat_size": 32
+        },
+        "first_matching_sample_seconds": 0.0004621819999997001
+      },
+      {
+        "reader": "linux",
+        "writer": "macos",
+        "origin": "macos",
+        "variant": "grow_close",
+        "status": "failed",
+        "first_read": {
+          "status": "ok",
+          "length": 32,
+          "stat_size": 64
+        },
+        "first_matching_sample_seconds": 0.10548038999999676
+      },
+      {
+        "reader": "linux",
+        "writer": "macos",
+        "origin": "macos",
+        "variant": "grow_fsync",
+        "status": "failed",
+        "first_read": {
+          "status": "ok",
+          "length": 32,
+          "stat_size": 64
+        },
+        "first_matching_sample_seconds": 0.10068098400000025
+      },
+      {
+        "reader": "linux",
+        "writer": "macos",
+        "origin": "macos",
+        "variant": "atomic_replace",
+        "status": "failed",
+        "first_read": {
+          "status": "error",
+          "error": "FileNotFoundError",
+          "errno": 2
+        },
+        "first_matching_sample_seconds": 0.5008053729999986
+      }
+    ],
+    "remount_diagnostics": "One atomic-replacement file per reader matched after remount; Linux had already recovered. Other files were not checked after remount.",
+    "container_tests": "not_run: plain guest coherence failed",
+    "cleanup_errors": [],
+    "interpretation": "Dual-virtiofs workspace fails ordinary cross-guest read-after-write. Both file origins fail; writer fsync does not resolve it. macOS failures persist through two seconds; Linux failures recover on later reads. Exact faulty stack component is not established."
   }
 }

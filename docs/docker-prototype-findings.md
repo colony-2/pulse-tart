@@ -1,5 +1,45 @@
 # Docker capability evaluation — 2026-11-05
 
+The current no-bind contract and live results supersede the shared-workspace
+direction below. See [no-bind findings](docker-no-bind-findings.md) and the
+[implementation plan](docker-capability-plan.md). Older evidence remains historical.
+
+## Filesystem reproduction at 20:24 UTC — shared workspace blocked
+
+`20261106T202438Z-docker-tart-5740` completed all 16 plain-guest cases on
+Tart 2.41.1, host macOS 26.7.2, guest macOS 26.6.2 (25G83), and Linux
+7.0.0-42-generic. **Fourteen failed the first-read requirement.** Every initial
+baseline was valid; the host backing file and writing guest had the expected
+new bytes in all 16 cases. These results supersede the cache hypothesis below:
+cross-guest read-after-write is demonstrably broken for this tested setup.
+They do not identify which component of the virtualization/filesystem stack
+causes the defect.
+
+| Reader after other guest writes | Same-size overwrite | Growing overwrite | Growing + fsync | Atomic replacement |
+| --- | --- | --- | --- | --- |
+| macOS | Old bytes | Old bytes followed by zeros | Old bytes followed by zeros | FileNotFoundError |
+| Linux | Passed | Truncated first read | Truncated first read | FileNotFoundError on first read |
+
+Each cell represents two cases, with the file initially created by either
+guest. macOS failed all eight cases throughout the two-second observation
+window. Linux passed two immediately; the other six recovered on later samples
+at about 0.1–0.5 seconds. Those are sample times after observation began, not
+precise propagation delays; retries also perform additional reads and stats.
+Writer fsync did not prevent the failures.
+
+Remount diagnostics read the correct bytes for one atomic-replacement file in
+each guest. Only those two files were checked after remount; Linux had already
+recovered before remount. This does not establish remounting as a general fix.
+No Docker setup or container tests ran because the plain filesystem prerequisite
+failed. Both owned VMs have cleanup samples and no cleanup errors are recorded.
+
+The stable-root strategy avoids replacing a mounted directory but does not
+provide coherent file contents. Keep the current dual-virtiofs macOS Docker
+workspace unavailable; neither sleeps nor fsync-only admission changes satisfy
+ordinary job/container filesystem behavior. A different workspace-sharing design
+needs to pass this matrix before another full macOS c2j run is useful. The
+previous Linux-only Docker and macOS API/TCP results remain separate evidence.
+
 ## Local Tart follow-up — 2026-11-06
 
 The user ran `test-results/20261106T003000Z-docker-tart-6375.tar.gz` on an

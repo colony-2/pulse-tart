@@ -13,6 +13,9 @@ p.add_argument("--display-output", help="Output directory as displayed to the us
 p.add_argument("--rounds", type=int, default=2)
 p.add_argument("--adopt-engine")
 p.add_argument("--relay-only", action="store_true")
+p.add_argument("--no-bind", action="store_true", help="current Docker contract without shared filesystems")
+p.add_argument("--no-bind-extras-only", action="store_true", help="explicitly skip already-qualified c2j job for SDK/registry iteration")
+p.add_argument("--no-bind-platform", choices=["both", "linux", "macos"], default="both")
 p.add_argument(
     "--filesystem-only",
     action="store_true",
@@ -31,8 +34,16 @@ p.add_argument(
 )
 p.add_argument("--lifecycle", choices=["cold", "suspended"], default="cold")
 a = p.parse_args()
-if a.filesystem_only and (a.macos_workspace or a.relay_only or a.adopt_engine):
+if a.filesystem_only and (a.no_bind or a.macos_workspace or a.relay_only or a.adopt_engine):
     p.error("filesystem-only cannot be combined with another focused mode")
+if a.no_bind_extras_only and (not a.no_bind or a.no_bind_platform != "macos"):
+    p.error("no-bind-extras-only requires --no-bind --no-bind-platform macos")
+if a.no_bind and (a.macos_workspace or a.relay_only or a.adopt_engine or a.slots != 1):
+    p.error("no-bind uses one slot per process; other modes must be run separately")
+if a.no_bind and a.lifecycle == "suspended" and (a.backend != "tart" or a.no_bind_platform != "macos" or a.no_bind_extras_only or a.rounds < 2):
+    p.error("suspended no-bind requires local Tart, --no-bind-platform macos, full jobs and --rounds at least 2")
+if a.macos_workspace:
+    p.error("shared-workspace execution was superseded; use --no-bind (filesystem-only remains a historical diagnostic)")
 if a.rounds < 1:
     p.error("rounds must be positive")
 OUT = pathlib.Path(a.output).resolve()
@@ -93,6 +104,8 @@ def save():
 def result(case, status, reason="", **values):
     report["cases"][case].update(status=status, reason=reason, **values)
     save()
+    if a.no_bind:
+        print(case + ": " + status, flush=True)
 
 
 def api(method, path, body=None):
@@ -129,6 +142,7 @@ def tart(*args):
 
 
 owned = []
+worker_helpers = []
 
 
 def persist(j):
@@ -380,7 +394,7 @@ def run_job(j):
         "lease": "not-a-lease",
     }
     assert allocation(j, "submit", invalid)[0]["status"] == "unsupported"
-    launch = json.loads(guest(j, "curl -fsS http://127.0.0.1:18881/launch?case=valid"))
+    launch = json.loads(guest(j, "curl -fsS 'http://127.0.0.1:18881/launch?case=valid'"))
     launch.update(
         launch_id=j["spec"]["name"] + "-job",
         base="macos-*arm64" if "engine" in j else "ubuntu-*arm64",
@@ -395,8 +409,12 @@ def run_job(j):
     )  # New controller process and same durable state.
 
     def complete():
-        s = json.loads(guest(j, "curl -fsS http://127.0.0.1:18881/status?case=valid"))
-        if s["status"] != "COMPLETED":
+        s = json.loads(guest(j, "curl -fsS 'http://127.0.0.1:18881/status?case=valid'"))
+        if s["status"] not in ("COMPLETED", "FAILED", "CANCELED", "CANCELLED"):
+            if s.get("claims", 0) == 1 and s.get("renewals", 0) > 0:
+                observed = time.time()
+                j.setdefault("job_running_first_unix", observed)
+                j["job_running_last_unix"] = observed
             return None
         return s
 
@@ -528,7 +546,12 @@ def mac_relay(engine, mac=None, on_ready=None, task_user="admin"):
             engine,
             "sudo chmod 600 /home/pulseengine/.ssh/authorized_keys; sudo chown -R pulseengine:pulseengine /home/pulseengine/.ssh; sudo sshd -t; sudo systemctl reload ssh",
         )
-        hostkey = guest(engine, "cat /etc/ssh/ssh_host_ed25519_key.pub")
+        if a.no_bind:
+            from no_bind import endpoint_transport
+            address, hostkey = endpoint_transport(globals(), engine, mac)
+        else:
+            address = None
+            hostkey = guest(engine, "cat /etc/ssh/ssh_host_ed25519_key.pub")
         ip = guest(engine, "hostname -I | awk '{print $1}'").decode().strip()
         guest(
             mac,
@@ -557,8 +580,9 @@ def mac_relay(engine, mac=None, on_ready=None, task_user="admin"):
             == b"reachable"
         )
         report["direct_guest_route"] = {"address": ip, "reachable": direct}
-        address = ip + ":22"
-        if not direct:
+        if address is not None:
+            report["engine_data_path"] = "Worker endpoint to allocation-only SSH service; independent of one-shot provider processes."
+        elif not direct:
             tunnel_log = open(OUT / "engine-tunnel.log", "wb")
 
             def start_tunnel():
@@ -591,6 +615,7 @@ def mac_relay(engine, mac=None, on_ready=None, task_user="admin"):
                 "Per-allocation end-to-end SSH over an external-controller tunnel; no controller credentials in guests."
             )
         else:
+            address = ip + ":22"
             report["engine_data_path"] = "Direct per-allocation guest-to-guest SSH."
         config = {
             "Address": address,
@@ -845,23 +870,24 @@ try:
         report["controller"] = api("GET", "/controller/info")
         report["workers"] = api("GET", "/workers")
         report["cluster_settings"] = api("GET", "/cluster-settings")
-        share = spec(owner + "-share-policy")
-        share["hostDirs"] = [
-            {"name": "workspace", "path": "/tmp/" + owner + "/workspace", "ro": False}
-        ]
-        try:
-            j = create(share)
-            result(
-                "orchard_workspace_provision",
-                "not_run",
-                "HostDir creation accepted, but no scoped remote directory-create/delete API is implemented; no security settings were changed.",
-            )
-            cleanup(j)
-        except urllib.error.HTTPError as e:
-            body = e.read().decode()
-            result("orchard_workspace_provision", "failed", body, http_status=e.code)
-            if owned and owned[-1].get("uid") is None:
-                owned[-1]["cleaned"] = True
+        if not a.no_bind:
+            share = spec(owner + "-share-policy")
+            share["hostDirs"] = [
+                {"name": "workspace", "path": "/tmp/" + owner + "/workspace", "ro": False}
+            ]
+            try:
+                j = create(share)
+                result(
+                    "orchard_workspace_provision",
+                    "not_run",
+                    "HostDir creation accepted, but no scoped remote directory-create/delete API is implemented; no security settings were changed.",
+                )
+                cleanup(j)
+            except urllib.error.HTTPError as e:
+                body = e.read().decode()
+                result("orchard_workspace_provision", "failed", body, http_status=e.code)
+                if owned and owned[-1].get("uid") is None:
+                    owned[-1]["cleaned"] = True
     else:
         if platform.system() != "Darwin" or platform.machine() != "arm64":
             raise RuntimeError("local Tart requires an Apple Silicon Mac")
@@ -883,6 +909,10 @@ try:
         from coherence import run_coherence
 
         run_coherence(globals())
+    elif a.no_bind:
+        from no_bind import run_no_bind
+
+        run_no_bind(globals())
     elif a.macos_workspace:
         if a.backend != "tart":
             raise RuntimeError(
@@ -1116,6 +1146,14 @@ finally:
                 print(
                     "Cleanup needs inspection:", j["spec"]["name"], str(e), flush=True
                 )
+    for process, log in worker_helpers:
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+        log.close()
     for key, value in report["cases"].items():
         if (
             value["status"] == "not_run"
@@ -1127,7 +1165,7 @@ finally:
     report["scope"] = (
         "filesystem-coherence"
         if a.filesystem_only
-        else ("macos-workspace" if a.macos_workspace else "full-contract")
+        else ("no-bind-" + a.no_bind_platform if a.no_bind else ("macos-workspace" if a.macos_workspace else "full-contract"))
     )
     report["complete"] = all(
         c["status"] == "passed" for k, c in report["cases"].items() if k != "amd64"
@@ -1135,6 +1173,11 @@ finally:
     required = list(report["cases"])
     if a.filesystem_only:
         required = ["shared_file_coherence", "shared_container_coherence"]
+    elif a.no_bind:
+        from no_bind import required_cases
+        required = required_cases(a.no_bind_platform, a.no_bind_extras_only)
+        if a.lifecycle == "suspended":
+            required += ["no_bind_snapshot_reuse"]
     elif a.macos_workspace:
         required = [
             "macos_c2j_workspace",
@@ -1158,6 +1201,7 @@ finally:
         and not report.get("cleanup_errors")
         else "incomplete"
     )
+    report["finished_unix"] = time.time()
     report["private_state"] = str(PRIVATE)
     save()
     display_out = pathlib.Path(a.display_output) if a.display_output else OUT

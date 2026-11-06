@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import pathlib
+import signal
 import subprocess
 import time
 import urllib.error
@@ -104,6 +105,29 @@ for path in sorted(root.glob("*.json")):
     except Exception as e:
         errors.append(name)
         print("Preserved", name, ":", str(e), flush=True)
+# Detached native worker helpers survive a test-controller crash. Only terminate
+# the recorded session leader with this exact private ready-file identity.
+if not errors:
+    for path in root.glob('*-endpoint.json'):
+        helper = json.loads(path.read_text())
+        if helper.get('helper_kind') != 'pulse-test-worker-endpoint':
+            continue
+        try:
+            pid = int(helper['pid'])
+            if pid <= 1 or helper['ready'] != str(path):
+                raise RuntimeError('invalid helper identity')
+            ps = subprocess.run(['ps','-p',str(pid),'-o','command='],capture_output=True,text=True)
+            if ps.returncode == 0 and ps.stdout.strip():
+                expected = helper['script']+' --target '+helper['target']+' --ready '+str(path)
+                if expected not in ps.stdout or os.getpgid(pid) != pid:
+                    raise RuntimeError('helper process identity changed')
+                os.kill(pid, signal.SIGTERM)
+            path.unlink()
+        except ProcessLookupError:
+            path.unlink(missing_ok=True)
+        except Exception as e:
+            errors.append(str(path))
+            print('Preserved helper:', str(e), flush=True)
 if errors:
     raise SystemExit(1)
 print("Owned VMs removed. Private journal/workspace retained for inspection at", root)
