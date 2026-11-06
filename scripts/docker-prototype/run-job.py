@@ -6,6 +6,7 @@ with open(root + "/delivery") as f:
     payload = json.load(f)
 os.unlink(root + "/delivery")
 worker = pwd.getpwnam("pulseworker")
+workspace = payload.get("workspace", "/Users/pulseworker/work")
 
 
 def user():
@@ -17,7 +18,8 @@ def user():
 env = dict(
     os.environ,
     HOME=worker.pw_dir,
-    TMPDIR="/Users/pulseworker/work/tmp",
+    TMPDIR=workspace + "/tmp",
+    TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="/var/run/docker.sock",
     DOCKER_HOST="unix:///var/run/docker.sock",
     PATH="/opt/pulse-docker:/usr/local/bin:/usr/bin:/bin",
 )
@@ -29,7 +31,7 @@ with open(root + "/worker.log", "wb") as log:
             stdout=log,
             stderr=log,
             env=env,
-            cwd="/Users/pulseworker/work",
+            cwd=workspace,
             preexec_fn=user,
         )
         code = result.returncode

@@ -367,5 +367,349 @@
     "status": "passed"
   },
   "engine_data_path": "Per-allocation end-to-end SSH over an external-controller tunnel; no controller credentials in guests.",
-  "cleanup_followup": "All owned VM API records deleted; final inventory empty. Earlier failed suspend stop HTTP412 resolved by verified-UID deletion. Physical storage removal not attested."
+  "cleanup_followup": "All owned VM API records deleted; final inventory empty. Earlier failed suspend stop HTTP412 resolved by verified-UID deletion. Physical storage removal not attested.",
+  "local_tart_followup": {
+    "source_report": "20261106T003000Z-docker-tart-6375",
+    "date": "2026-11-06",
+    "result": "incomplete",
+    "host": {
+      "chip": "Apple M4 Max",
+      "cores": 16,
+      "memory_gb": 128,
+      "macos": "26.7.2",
+      "tart": "2.41.1"
+    },
+    "cases": {
+      "linux_cold_boot": {
+        "description": "Digest-pinned Linux guest and private Engine",
+        "status": "passed",
+        "reason": "",
+        "samples": 4
+      },
+      "linux_jobdb": {
+        "description": "Real supplied lease, concrete base, Docker build/run in c2j worktree",
+        "status": "passed",
+        "reason": "Executed through supplied JobDB lease and shared Provider API; see per-VM job reports."
+      },
+      "linux_api_discovery": {
+        "description": "Opt-in capability discovery and definite unsupported declines",
+        "status": "passed",
+        "reason": "Executed through supplied JobDB lease and shared Provider API; see per-VM job reports."
+      },
+      "linux_replay": {
+        "description": "Controller process restart, duplicate delivery and single lease execution",
+        "status": "passed",
+        "reason": "Executed through supplied JobDB lease and shared Provider API; see per-VM job reports."
+      },
+      "linux_two_slots": {
+        "description": "Two simultaneous engines with identical names, volumes and TCP ports",
+        "status": "passed",
+        "reason": "Two engines with distinct IDs, identical names/volumes/ports, concurrent jobs.",
+        "engine_ids": [
+          "df43cd2f-b82f-43f6-9e8f-f7cc159cefe6",
+          "dcd7671b-5e70-439e-900e-eb9ab2212516"
+        ]
+      },
+      "linux_two_generations": {
+        "description": "Two sequential disposable allocations per experimental slot",
+        "status": "passed",
+        "reason": "",
+        "generations": 2,
+        "slots": 2
+      },
+      "linux_cli": {
+        "description": "Buildx load, bind directories/files/spaces/tmp, Compose, exec, logs, copy and stdin streaming",
+        "status": "passed",
+        "reason": "Executed through supplied JobDB lease and shared Provider API; see per-VM job reports."
+      },
+      "linux_sdk": {
+        "description": "Docker SDK and concurrent API requests",
+        "status": "passed",
+        "reason": "Official Python Docker SDK, concurrent ping and container run."
+      },
+      "linux_testcontainers_go": {
+        "description": "Go Testcontainers with resource reaper enabled",
+        "status": "passed",
+        "reason": "Resource reaper enabled; HTTP service reached through mapped port."
+      },
+      "linux_testcontainers_java": {
+        "description": "Java Testcontainers with resource reaper enabled",
+        "status": "passed",
+        "reason": "Resource reaper enabled; HTTP service reached through mapped port."
+      },
+      "linux_native_fs": {
+        "description": "Native filesystem baseline and Git/build timings",
+        "status": "passed",
+        "reason": "Native-disk primitives and timings recorded; this is not shared-filesystem evidence."
+      },
+      "linux_suspend": {
+        "description": "Exact deployed Linux suspend/restore combination",
+        "status": "failed",
+        "reason": "suspendable Linux boot timed out: Command failed; see command-failure-79634878.log"
+      },
+      "macos_shared_mounts": {
+        "description": "Same-host virtiofs in macOS/Linux at identical guest paths",
+        "status": "passed",
+        "reason": "Host/macOS/Linux/container bidirectional visibility at /Users/Shared/pulse/work. No c2j claim is implied."
+      },
+      "macos_c2j_workspace": {
+        "description": "Actual c2j checkout and temporary directories on shared storage",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "shared_fs_semantics": {
+        "description": "Cross-guest files, ownership, chmod/chown, rename, symlinks, locks, concurrent writers, case and xattrs",
+        "status": "not_run",
+        "reason": "Per-guest primitives measured; cross-guest locking, notifications, concurrent writers and escape tests remain unverified."
+      },
+      "shared_notifications": {
+        "description": "Cross-guest notifications independently of visibility",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "shared_dependency_build": {
+        "description": "Shared versus native Git/dependency installation/build measurements",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "shared_path_isolation": {
+        "description": "Symlink/traversal cannot access another allocation or infrastructure",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "share_suspend": {
+        "description": "Suspend/restore with directory shares on both OSes",
+        "status": "not_run",
+        "reason": "macOS suspension succeeded; clone restore and Linux equivalent still need verification."
+      },
+      "share_retarget": {
+        "description": "Suspended clone with another share or supported post-resume retarget",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "share_directory_replacement": {
+        "description": "Host-directory replacement and stale-handle/cache tests",
+        "status": "failed",
+        "reason": "Replacement at same host pathname while mounted.",
+        "observed": {
+          "macos": "stale-handle",
+          "linux": "stale-handle"
+        }
+      },
+      "macos_two_slots_generations": {
+        "description": "Two simultaneous pairs and two sequential jobs per slot",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "macos_authenticated_api": {
+        "description": "Allocation-scoped authenticated bridge and conventional Unix socket",
+        "status": "passed",
+        "reason": "Per-allocation SSH key, pinned engine host key, real macOS Unix socket including conventional /var/run/docker.sock. Public admin image credentials remain a lab limitation."
+      },
+      "macos_docker_api": {
+        "description": "SDK, CLI, Buildx, Compose, attach/log streams and copy",
+        "status": "not_run",
+        "reason": "Real ping/inspect/start/exec/logs/copy passed through relay. CLI plugins, build and attach coverage remain incomplete."
+      },
+      "macos_tcp_ports": {
+        "description": "Fixed/dynamic loopback and wildcard publications reach macOS localhost",
+        "status": "passed",
+        "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+      },
+      "macos_start_gate": {
+        "description": "Start completion waits for relay binding; no registration sleeps",
+        "status": "passed",
+        "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+      },
+      "macos_port_conflicts": {
+        "description": "Local port conflict is detected and reported",
+        "status": "passed",
+        "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+      },
+      "macos_relay_recovery": {
+        "description": "Relay restart discovers existing publications and restores forwarding",
+        "status": "passed",
+        "reason": "Force-killed relay reconnected and rediscovered preexisting Linux publication at localhost:18080."
+      },
+      "macos_callbacks": {
+        "description": "Container-to-job callback route/name",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "udp": {
+        "description": "UDP publication behavior, independent of TCP",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "macos_testcontainers": {
+        "description": "Go and Java Testcontainers with reaper enabled",
+        "status": "not_run",
+        "reason": "Go Testcontainers with Ryuk passed; Java on macOS has not been run."
+      },
+      "orchard_workspace_provision": {
+        "description": "Remote scoped host-directory create/mount/delete without host filesystem access",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "pair_placement_accounting": {
+        "description": "Both guests on selected worker, companion resources reserved separately",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "pair_partial_creation": {
+        "description": "Either VM creation fails and partial ownership recovers",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "fault_mount_credentials": {
+        "description": "Failure during mount preparation and credential distribution",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "fault_handoff": {
+        "description": "Failures before/during/after handoff preserve unknown and prevent fallback duplication",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "fault_engine_controller_relay": {
+        "description": "Independent controller, engine and relay termination",
+        "status": "not_run",
+        "reason": "Engine stop returned 502; engine and force-killed relay recovered. Controller independence covered for Linux, but full paired-allocation fault matrix remains untested."
+      },
+      "lease_loss_cleanup": {
+        "description": "Completion, cancellation/lease loss and abandoned-attempt reclamation",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "backend_unreachable": {
+        "description": "Observation failure is not empty inventory or free capacity",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "stress_cpu_memory_disk": {
+        "description": "Container CPU/memory saturation and disk exhaustion measurements",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      },
+      "private_prune": {
+        "description": "Prune private engine without affecting other allocation or infrastructure",
+        "status": "passed",
+        "reason": "Pruned first private VM; second VM container stayed reachable."
+      },
+      "amd64": {
+        "description": "Optional AMD64 emulation, separately reported",
+        "status": "not_run",
+        "reason": "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
+      }
+    },
+    "samples": [
+      {
+        "vm": "pulse-docker-511e1245ab10-g0-s1",
+        "cold_prepare_seconds": 36.61072379199322
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-g0-s0",
+        "cold_prepare_seconds": 36.8721145419986
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-g0-s0",
+        "job_seconds": 96.22795583301922,
+        "exit": "0",
+        "jobdb": {
+          "status": "COMPLETED",
+          "output_ok": true,
+          "claims": 1,
+          "renewals": 6,
+          "secret_calls": 1
+        }
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-g0-s1",
+        "job_seconds": 96.22838854201837,
+        "exit": "0",
+        "jobdb": {
+          "status": "COMPLETED",
+          "output_ok": true,
+          "claims": 1,
+          "renewals": 6,
+          "secret_calls": 1
+        }
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-g0-s0",
+        "cleanup_seconds": 0.18463770800735801
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-relay-mac",
+        "cleanup_seconds": 0.32627983298152685
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-g0-s1",
+        "cleanup_seconds": 0.19524537498364225
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-g1-s1",
+        "cold_prepare_seconds": 35.26660970796365
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-g1-s0",
+        "cold_prepare_seconds": 36.49159512500046
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-g1-s1",
+        "job_seconds": 95.69731029198738,
+        "exit": "0",
+        "jobdb": {
+          "status": "COMPLETED",
+          "output_ok": true,
+          "claims": 1,
+          "renewals": 6,
+          "secret_calls": 1
+        }
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-g1-s0",
+        "job_seconds": 95.71902274998138,
+        "exit": "0",
+        "jobdb": {
+          "status": "COMPLETED",
+          "output_ok": true,
+          "claims": 1,
+          "renewals": 6,
+          "secret_calls": 1
+        }
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-g1-s0",
+        "cleanup_seconds": 0.16892845899565145
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-g1-s1",
+        "cleanup_seconds": 0.18281829199986532
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-shared-linux",
+        "cold_prepare_seconds": 45.154385291971266
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-shared-mac",
+        "cleanup_seconds": 0.3354279580526054
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-shared-linux",
+        "cleanup_seconds": 0.20173683401662856
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-shared-suspend",
+        "cleanup_seconds": 0.16687304101651534
+      },
+      {
+        "vm": "pulse-docker-511e1245ab10-linux-suspend",
+        "cleanup_seconds": 0.026561915990896523
+      }
+    ],
+    "cleanup_errors": [],
+    "run_error": null,
+    "interpretation": "Basic shared visibility and macOS suspension passed; mounted-directory replacement failed. Resume/retarget and actual macOS c2j shared worktree remain untested. macOS xattr probe has a Python portability defect."
+  }
 }

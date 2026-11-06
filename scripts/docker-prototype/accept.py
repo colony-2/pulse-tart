@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """One disposable VM, one immutable execution intent. Payload arrives on stdin."""
 
-import json, os, subprocess, sys
+import json, os, subprocess, sys, platform, plistlib
 
 root = "/var/lib/pulse-docker"
 os.makedirs(root, mode=0o700, exist_ok=True)
@@ -22,15 +22,27 @@ try:
     os.fsync(directory)
 finally:
     os.close(directory)
-subprocess.run(
-    [
+if platform.system() == "Darwin":
+    service = {
+        "Label": "dev.pulse.docker-job",
+        "ProgramArguments": ["/usr/bin/python3", "/opt/pulse-docker/run-job.py"],
+        "RunAtLoad": True,
+        "StandardOutPath": root + "/runner.log",
+        "StandardErrorPath": root + "/runner.log",
+    }
+    path = root + "/job.plist"
+    with open(path, "wb") as f:
+        plistlib.dump(service, f)
+    os.chmod(path, 0o600)
+    command = ["/bin/launchctl", "bootstrap", "system", path]
+else:
+    command = [
         "systemd-run",
         "--unit=pulse-docker-job",
         "/usr/bin/python3",
         "/opt/pulse-docker/run-job.py",
-    ],
-    check=True,
-    stdout=subprocess.DEVNULL,
-    stderr=subprocess.DEVNULL,
+    ]
+subprocess.run(
+    command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
 )
 print("PULSE_DOCKER_ACCEPTED")

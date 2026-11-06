@@ -1,5 +1,66 @@
 # Docker capability evaluation — 2026-11-05
 
+## Local Tart follow-up — 2026-11-06
+
+The user ran `test-results/20261106T003000Z-docker-tart-6375.tar.gz` on an
+M4 Max (16 cores, 128 GB), macOS 26.7.2, Tart 2.41.1. This supersedes the earlier
+absence of native-host evidence below. The run completed without a run error
+or cleanup error; all nine owned VMs have cleanup samples.
+
+- Four Linux c2j jobs, SDK/Go/Java Testcontainers, isolation, and the macOS
+  API/TCP relay checks passed again. Linux preparation took 35.27–36.87 seconds
+  for the four job allocations.
+- **Virtiofs visibility passed** across host, macOS, Linux and an inner Docker
+  container at matching guest paths. This establishes basic sharing feasibility,
+  not the complete filesystem or actual macOS c2j workspace contract.
+- **Host-directory replacement failed:** after renaming the mounted directory
+  and creating a replacement at its original path, neither guest could read
+  the replacement marker. The probe labels this `stale-handle`; it does not
+  distinguish retained handles from every other lookup failure. Replacing the
+  directory at a fixed pathname is therefore not a validated retarget mechanism.
+- macOS suspension with a share attached succeeded. Resume, suspended cloning
+  and retargeting were not tested. Linux suspension was rejected explicitly:
+  `You can only suspend macOS VMs`.
+- Filesystem semantics still need investigation: the macOS same-guest flock
+  exclusion probe failed, and case-sensitivity observations differed between
+  guests. The macOS xattr probe failed because its Python lacks `os.setxattr`;
+  that is a test portability defect, not evidence of unsupported filesystem
+  xattrs. Linux shared-filesystem checks passed, with case-insensitive behavior.
+
+The report remains correctly `incomplete`. A stable share-directory inode with
+contents cleaned only after all old guests/readers are gone is a candidate to
+test; it is not yet a proven reusable-template design. The existing Orchard
+workspace-provisioning limitation is unchanged.
+
+## Implementation follow-up — awaiting the next Mac run
+
+The focused `scripts/test-macos-docker.sh` now implements real macOS c2j execution
+with a fresh Linux engine and native macOS Docker CLI/plugins. `NewMacOS` uses the
+shared Provider API, verifies the concrete primary facts and companion engine
+identity, then checks primary/engine/container workspace visibility before lease
+delivery. Reopened journals preserve one execution and List includes both VMs.
+
+The directory-replacement strategy has been removed from the focused execution
+path. Each prepared slot template retains a stable mounted root; jobs use fresh
+children removed only after both job guests are deleted. Cold and suspended
+macOS lifecycle modes are explicit; suspended mode checks preserved boot identity
+and runs two real jobs through separate clones. Linux never requests suspension.
+The original failing replacement/suspend probes remain in the full diagnostic
+suite as research evidence, not required steps for the usable cold Linux path.
+
+The xattr diagnostic now uses the macOS command-line API. Lock tests distinguish
+lock contention from arbitrary child errors and test acquisition after release.
+Case tests compare file identity to avoid drawing conclusions from cached reads.
+These probe changes do not establish that virtiofs has correct locking or cache
+semantics; their new results still need to be collected.
+
+Local verification: the full test tools built successfully (including Darwin
+c2j/fixture/CLI/Buildx and a checksum-verified Compose release), focused Go race
+tests, workspace cleanup safety tests, and native Linux filesystem checks passed.
+No new live macOS/shared-workspace success is claimed until its report arrives.
+
+## Earlier Orchard evaluation
+
 **Linux Docker execution is demonstrated. macOS Docker API/TCP forwarding is
 demonstrated. The full macOS Docker allocation remains unproven**, chiefly because
 the available Orchard cannot provision the shared workspace. Do not advertise

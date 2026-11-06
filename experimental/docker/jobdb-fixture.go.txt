@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -80,10 +81,7 @@ func run() error {
 	if err = os.Mkdir(filepath.Join(repo, ".c2"), 0700); err != nil {
 		return err
 	}
-	configText := "packages:\n  - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#hello\n"
-	if true {
-		configText = "packages: []\n"
-	}
+	configText := "packages: []\n"
 	if err = os.WriteFile(filepath.Join(repo, ".c2", "config.yaml"), []byte(configText), 0600); err != nil {
 		return err
 	}
@@ -153,8 +151,8 @@ inputs:
 outputs:
   result: '${{ op.outputs.stdout }}'
 `
-	if os.Getenv("PULSE_FIXTURE_SKIP_NIX") == "1" {
-		recipeText = strings.ReplaceAll(recipeText, "hello; ", "")
+	if goruntime.GOOS == "darwin" {
+		recipeText = strings.ReplaceAll(recipeText, "ubuntu-*arm64", "macos-*arm64")
 	}
 	rec, err := recipe.LoadRecipeFromString([]byte(recipeText))
 	if err != nil {

@@ -9,9 +9,22 @@ p = argparse.ArgumentParser()
 p.add_argument("backend", choices=["tart", "orchard"])
 p.add_argument("--tools", required=True)
 p.add_argument("--output", required=True)
+p.add_argument("--display-output", help="Output directory as displayed to the user")
 p.add_argument("--rounds", type=int, default=2)
 p.add_argument("--adopt-engine")
 p.add_argument("--relay-only", action="store_true")
+p.add_argument(
+    "--macos-workspace",
+    action="store_true",
+    help="focused cold/suspended shared-workspace and macOS c2j tests",
+)
+p.add_argument(
+    "--slots",
+    type=int,
+    default=1,
+    help="number of independent workspace templates to exercise sequentially",
+)
+p.add_argument("--lifecycle", choices=["cold", "suspended"], default="cold")
 a = p.parse_args()
 if a.rounds < 1:
     p.error("rounds must be positive")
@@ -104,6 +117,7 @@ def tart(*args):
     return cmd(
         ["tart", *args],
         env=dict(os.environ, TART_HOME=TART_HOME, TART_NO_AUTO_PRUNE="true"),
+        timeout=900 if args and args[0] in ("clone", "pull") else 120,
     ).stdout
 
 
@@ -123,7 +137,7 @@ def native(j):
     return json.loads(tart("get", j["spec"]["name"], "--format", "json"))
 
 
-def create(s):
+def create(s, source=None, resume=False):
     j = {
         "url": URL if a.backend == "orchard" else "",
         "spec": s,
@@ -136,16 +150,17 @@ def create(s):
         v = api("POST", "/vms", s)
         j["uid"] = v["uid"]
     else:
-        tart("clone", s["image"], s["name"])
-        tart(
-            "set",
-            s["name"],
-            "--cpu",
-            str(s["cpu"]),
-            "--memory",
-            str(s["memory"]),
-            "--random-mac",
-        )
+        tart("clone", source or s["image"], s["name"])
+        if not resume:
+            tart(
+                "set",
+                s["name"],
+                "--cpu",
+                str(s["cpu"]),
+                "--memory",
+                str(s["memory"]),
+                "--random-mac",
+            )
         directory = pathlib.Path(TART_HOME) / "vms" / s["name"]
         j["inode"] = directory.stat().st_ino
         j["uid"] = "local:" + str(j["inode"])
@@ -178,6 +193,11 @@ def create(s):
 
 def guest(j, command, data=None, timeout=180):
     if a.backend == "tart":
+        log = PRIVATE / (j["spec"]["name"] + ".run.log")
+        if log.exists():
+            output = log.read_text(errors="replace")
+            if "Error:" in output and native(j).get("State") == "stopped":
+                raise RuntimeError(output[-2000:].strip())
         j["address"] = (
             tart("ip", j["spec"]["name"], "--wait", "5").decode().strip() + ":22"
         )
@@ -280,6 +300,7 @@ def prepare(j):
         "run-job.py",
         "filesystem.py",
         "sdk.py",
+        "check-workspace.py",
     ]:
         upload(
             j,
@@ -310,19 +331,29 @@ def prepare(j):
 
 
 def allocation(j, action, launch=None):
+    args = [
+        str(TOOLS / "allocation"),
+        "-state",
+        str(persist(j)),
+        "-journal",
+        str(PRIVATE / (j["spec"]["name"] + "-allocation")),
+        "-action",
+        action,
+    ]
+    if "engine" in j:
+        args += [
+            "-engine-state",
+            str(persist(j["engine"])),
+            "-workspace",
+            j["workspace"],
+            "-base",
+            j["base"],
+        ]
     return json.loads(
         cmd(
-            [
-                str(TOOLS / "allocation"),
-                "-state",
-                str(persist(j)),
-                "-journal",
-                str(PRIVATE / (j["spec"]["name"] + "-allocation")),
-                "-action",
-                action,
-            ],
+            args,
             input=None if launch is None else json.dumps(launch).encode(),
-            timeout=90,
+            timeout=180,
         ).stdout
     )
 
@@ -332,7 +363,7 @@ def run_job(j):
     assert caps["bases_complete"] and "docker" in caps["bases"][0]["capabilities"]
     invalid = {
         "launch_id": "unsupported",
-        "base": "macos*",
+        "base": "ubuntu-*" if "engine" in j else "macos*",
         "job": {
             "jobdb": "http://127.0.0.1:18880/test",
             "job_id": "unsupported",
@@ -345,7 +376,7 @@ def run_job(j):
     launch = json.loads(guest(j, "curl -fsS http://127.0.0.1:18881/launch?case=valid"))
     launch.update(
         launch_id=j["spec"]["name"] + "-job",
-        base="ubuntu-*arm64",
+        base="macos-*arm64" if "engine" in j else "ubuntu-*arm64",
         capabilities=["docker", "git"],
         cpu_millis=1000,
         memory_bytes=2 << 30,
@@ -362,7 +393,18 @@ def run_job(j):
             return None
         return s
 
-    status = wait("c2j " + j["spec"]["name"], complete, 600)
+    try:
+        status = wait("c2j " + j["spec"]["name"], complete, 600)
+    finally:
+        try:
+            (OUT / (j["spec"]["name"] + "-worker.log")).write_bytes(
+                guest(
+                    j,
+                    "sudo cat /var/lib/pulse-docker/worker.log /var/lib/pulse-docker/runner.log 2>/dev/null || true",
+                )
+            )
+        except Exception:
+            pass
     (OUT / (j["spec"]["name"] + "-job.json")).write_text(json.dumps(status, indent=2))
     code = guest(j, "sudo cat /var/lib/pulse-docker/exit").decode().strip()
     report["samples"].append(
@@ -431,9 +473,15 @@ def cleanup(j):
         else:
             directory = pathlib.Path(TART_HOME) / "vms" / name
             assert directory.stat().st_ino == j["inode"]
+            log = PRIVATE / (name + ".run.log")
+            if log.exists():
+                (OUT / (name + "-native.log")).write_bytes(log.read_bytes())
             if v["State"] == "running":
                 tart("stop", name)
+                wait("native stop " + name, lambda: native(j)["State"] != "running", 30)
             tart("delete", name)
+            if directory.exists():
+                raise RuntimeError("owned native directory still exists")
         j["cleaned"] = True
         persist(j)
         report["samples"].append(
@@ -444,14 +492,16 @@ def cleanup(j):
         raise
 
 
-def mac_relay(engine):
+def mac_relay(engine, mac=None, on_ready=None, task_user="admin"):
+    owns_mac = mac is None
     macimage = "ghcr.io/cirruslabs/macos-tahoe-base@sha256:4aaa751fa7538902d73c767f27a066fc87e83f183069da4e4b5022863abd4c77"
-    mac = create(spec(owner + "-relay-mac", "darwin", macimage))
+    if owns_mac:
+        mac = create(spec(owner + "-relay-mac", "darwin", macimage))
     tunnel = None
     tunnel_log = None
     try:
         wait("macOS relay SSH", lambda: guest(mac, "true") == b"", 300)
-        key = PRIVATE / "engine-key"
+        key = PRIVATE / (mac["spec"]["name"] + "-engine-key")
         cmd(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)])
         guest(
             engine,
@@ -545,9 +595,14 @@ def mac_relay(engine):
         upload(mac, "/opt/pulse-docker/config.json", json.dumps(config).encode())
         guest(
             mac,
-            "sudo chown -R admin:staff /opt/pulse-docker; chmod 600 /opt/pulse-docker/engine-key /opt/pulse-docker/config.json; chmod 755 /opt/pulse-docker/relay /opt/pulse-docker/testcontainers-go; sudo ln -s /opt/pulse-docker/docker.sock /var/run/docker.sock",
+            "sudo chown "
+            + task_user
+            + " /opt/pulse-docker /opt/pulse-docker/engine-key /opt/pulse-docker/config.json; sudo chmod 600 /opt/pulse-docker/engine-key /opt/pulse-docker/config.json; sudo chmod 755 /opt/pulse-docker/relay /opt/pulse-docker/testcontainers-go; sudo ln -sf /opt/pulse-docker/docker.sock /var/run/docker.sock",
         )
         plist = b"""<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>Label</key><string>dev.pulse.docker-relay</string><key>UserName</key><string>admin</string><key>ProgramArguments</key><array><string>/opt/pulse-docker/relay</string><string>--config</string><string>/opt/pulse-docker/config.json</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>StandardOutPath</key><string>/var/tmp/pulse-docker-relay.log</string><key>StandardErrorPath</key><string>/var/tmp/pulse-docker-relay.log</string></dict></plist>"""
+        plist = plist.replace(
+            b"<string>admin</string>", ("<string>" + task_user + "</string>").encode()
+        )
         upload(mac, "/Library/LaunchDaemons/dev.pulse.docker-relay.plist", plist)
         guest(
             mac,
@@ -558,7 +613,9 @@ def mac_relay(engine):
             lambda: (
                 guest(
                     mac,
-                    "curl -fsS --unix-socket /var/run/docker.sock http://localhost/_ping",
+                    "sudo -u "
+                    + task_user
+                    + " curl -fsS --unix-socket /var/run/docker.sock http://localhost/_ping",
                 ).strip()
                 == b"OK"
             ),
@@ -573,7 +630,11 @@ def mac_relay(engine):
             "Per-allocation SSH key, pinned engine host key, real macOS Unix socket including conventional /var/run/docker.sock. Public admin image credentials remain a lab limitation.",
         )
         data = guest(
-            mac, "/usr/bin/python3 /opt/pulse-docker/relay-probe.py", timeout=180
+            mac,
+            "sudo -u "
+            + task_user
+            + " /usr/bin/python3 /opt/pulse-docker/relay-probe.py",
+            timeout=180,
         )
         (OUT / "macos-relay-network.json").write_bytes(data)
         for case in ("macos_tcp_ports", "macos_start_gate", "macos_port_conflicts"):
@@ -590,7 +651,9 @@ def mac_relay(engine):
         (OUT / "macos-testcontainers-go.log").write_bytes(
             guest(
                 mac,
-                "DOCKER_HOST=unix:///var/run/docker.sock TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock /opt/pulse-docker/testcontainers-go",
+                "sudo -u "
+                + task_user
+                + " env TMPDIR=/var/tmp DOCKER_HOST=unix:///var/run/docker.sock TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock /opt/pulse-docker/testcontainers-go",
                 timeout=300,
             )
         )
@@ -599,6 +662,8 @@ def mac_relay(engine):
             "not_run",
             "Go Testcontainers with Ryuk passed; Java on macOS has not been run.",
         )
+        if on_ready is not None:
+            on_ready(mac, engine)
         # A force-killed relay must recover existing published services and stale socket.
         guest(mac, "sudo launchctl kickstart -k system/dev.pulse.docker-relay")
         wait(
@@ -606,7 +671,9 @@ def mac_relay(engine):
             lambda: (
                 guest(
                     mac,
-                    "curl -fsS --unix-socket /var/run/docker.sock http://localhost/_ping",
+                    "sudo -u "
+                    + task_user
+                    + " curl -fsS --unix-socket /var/run/docker.sock http://localhost/_ping",
                 ).strip()
                 == b"OK"
             ),
@@ -621,7 +688,9 @@ def mac_relay(engine):
         guest(engine, "sudo systemctl stop docker.socket docker.service")
         code = guest(
             mac,
-            "curl -s --unix-socket /var/run/docker.sock -o /dev/null -w '%{http_code}' http://localhost/_ping",
+            "sudo -u "
+            + task_user
+            + " curl -s --unix-socket /var/run/docker.sock -o /dev/null -w '%{http_code}' http://localhost/_ping",
         ).decode()
         assert code == "502"
         guest(engine, "sudo systemctl start docker.service")
@@ -630,7 +699,9 @@ def mac_relay(engine):
             lambda: (
                 guest(
                     mac,
-                    "curl -fsS --unix-socket /var/run/docker.sock http://localhost/_ping",
+                    "sudo -u "
+                    + task_user
+                    + " curl -fsS --unix-socket /var/run/docker.sock http://localhost/_ping",
                 ).strip()
                 == b"OK"
             ),
@@ -657,7 +728,8 @@ def mac_relay(engine):
             )
         except Exception:
             pass
-        cleanup(mac)
+        if owns_mac:
+            cleanup(mac)
 
 
 def native_shared():
@@ -787,9 +859,26 @@ try:
         if platform.system() != "Darwin" or platform.machine() != "arm64":
             raise RuntimeError("local Tart requires an Apple Silicon Mac")
         report["tart_version"] = tart("--version").decode()
-        report["host"] = cmd(["system_profiler", "SPHardwareDataType"]).stdout.decode()
+        report["host"] = "\n".join(
+            line
+            for line in cmd(["system_profiler", "SPHardwareDataType"])
+            .stdout.decode()
+            .splitlines()
+            if not any(
+                key in line
+                for key in ("Serial Number", "Hardware UUID", "Provisioning UDID")
+            )
+        )
         report["host_os"] = cmd(["sw_vers"]).stdout.decode()
-    if a.relay_only:
+    if a.macos_workspace:
+        if a.backend != "tart":
+            raise RuntimeError(
+                "shared-workspace suite requires the Mac host; Orchard scoped workspace provisioning is unavailable"
+            )
+        from workspace import run_workspace
+
+        run_workspace(globals())
+    elif a.relay_only:
         engine = create(spec(owner + "-relay-engine"))
         prepare(engine)
         guest(
@@ -1022,15 +1111,38 @@ finally:
             value["reason"] = (
                 "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
             )
+    report["scope"] = "macos-workspace" if a.macos_workspace else "full-contract"
     report["complete"] = all(
         c["status"] == "passed" for k, c in report["cases"].items() if k != "amd64"
     )
+    required = list(report["cases"])
+    if a.macos_workspace:
+        required = [
+            "macos_c2j_workspace",
+            "macos_shared_mounts",
+            "stable_workspace_generations",
+            "macos_authenticated_api",
+            "macos_tcp_ports",
+            "macos_start_gate",
+            "macos_port_conflicts",
+            "macos_relay_recovery",
+        ]
+        if a.lifecycle == "suspended":
+            required += ["macos_shared_resume"]
+    report["required_cases"] = required
     report["result"] = (
         "passed"
-        if report["complete"] and not report.get("cleanup_errors")
+        if all(
+            report["cases"][k]["status"] == "passed" for k in required if k != "amd64"
+        )
+        and not report.get("run_error")
+        and not report.get("cleanup_errors")
         else "incomplete"
     )
     report["private_state"] = str(PRIVATE)
     save()
-    print("Report:", OUT / "report.json", "Result:", report["result"], flush=True)
+    display_out = pathlib.Path(a.display_output) if a.display_output else OUT
+    print(
+        "Report:", display_out / "report.json", "Result:", report["result"], flush=True
+    )
 sys.exit(0 if report["result"] == "passed" else 2)

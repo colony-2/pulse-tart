@@ -5,8 +5,8 @@ Opt-in experiments; not production Docker support. See
 [findings](../../docs/docker-prototype-findings.md), and
 [per-experiment results](../../docs/docker-prototype-results.json).
 
-The package implements one prepared disposable Linux allocation using the shared
-provider API, plus an authenticated macOS Docker socket/TCP relay. The test
+The package implements prepared disposable Linux allocations and macOS/Linux
+pairs using the shared provider API, plus an authenticated Docker socket/TCP relay. The test
 harness owns VM provisioning and cleanup. No default provider behavior changes.
 
 ```sh
@@ -16,3 +16,13 @@ go test -race ./experimental/docker/...
 ```
 
 Live suites deliberately exit 2 while required coverage is failed or incomplete.
+
+The new focused Mac path runs real c2j leases on a shared workspace:
+
+```sh
+./scripts/test-macos-docker.sh
+./scripts/test-macos-docker.sh --lifecycle suspended
+```
+
+Focused success applies only to the report's explicit `required_cases`; full
+production readiness is still reported separately as `complete: false`.

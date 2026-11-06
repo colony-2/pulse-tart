@@ -21,7 +21,10 @@ def check(name, fn):
         value = fn()
         out["checks"][name] = {"status": "passed", "value": value}
     except Exception as e:
-        out["checks"][name] = {"status": "failed", "reason": str(e)}
+        out["checks"][name] = {
+            "status": "failed",
+            "reason": type(e).__name__ + ": " + str(e),
+        }
     out["checks"][name]["seconds"] = time.monotonic() - start
 
 
@@ -41,23 +44,57 @@ check("directories_spaces_rename_symlink_chmod", files)
 
 
 def case():
-    (root / "Case").write_text("upper")
-    (root / "case").write_text("lower")
-    return (root / "Case").read_text() != "lower"
+    upper, lower = root / "Case", root / "case"
+    upper.write_text("upper")
+    # Existence/identity avoids mistaking the guest page cache for case sensitivity.
+    existed = lower.exists()
+    lower.write_text("lower")
+    same = os.path.samefile(upper, lower)
+    return {
+        "case_sensitive": not same,
+        "lower_existed_before_create": existed,
+        "same_inode": same,
+        "upper_read": upper.read_text(),
+        "lower_read": lower.read_text(),
+    }
 
 
 check("case_sensitive", case)
 
 
 def lock():
-    with open(root / "lock", "w") as f:
+    child = """import errno,fcntl,sys
+with open(sys.argv[1], 'a') as f:
+    try:
         fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        cmd = 'import fcntl,sys;f=open(sys.argv[1],"w");fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)'
+    except OSError as e:
+        if e.errno in (errno.EAGAIN, errno.EACCES):
+            sys.exit(73)
+        raise
+"""
+    with open(root / "lock", "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
         p = subprocess.run(
-            [sys.executable, "-c", cmd, str(root / "lock")], capture_output=True
+            [sys.executable, "-c", child, str(root / "lock")],
+            capture_output=True,
+            timeout=10,
         )
-        assert p.returncode != 0
-    return "second process denied while locked"
+        if p.returncode != 73:
+            raise RuntimeError(
+                "contender exit=%d (73=blocked, 0=acquired): %s"
+                % (p.returncode, p.stderr.decode(errors="replace"))
+            )
+    p = subprocess.run(
+        [sys.executable, "-c", child, str(root / "lock")],
+        capture_output=True,
+        timeout=10,
+    )
+    if p.returncode != 0:
+        raise RuntimeError(
+            "lock was not acquirable after release: "
+            + p.stderr.decode(errors="replace")
+        )
+    return "contender blocked while locked, acquired after release"
 
 
 check("same_guest_flock", lock)
@@ -65,8 +102,19 @@ check("same_guest_flock", lock)
 
 def xattr():
     f = root / "case"
+    if platform.system() == "Darwin":
+        subprocess.run(
+            ["/usr/bin/xattr", "-w", "dev.pulse.prototype", "value", str(f)],
+            check=True,
+            capture_output=True,
+        )
+        value = subprocess.check_output(
+            ["/usr/bin/xattr", "-p", "dev.pulse.prototype", str(f)]
+        ).strip()
+        assert value == b"value", "xattr did not round-trip"
+        return "dev.pulse.prototype"
     os.setxattr(f, "user.pulse", b"value")
-    assert os.getxattr(f, "user.pulse") == b"value"
+    assert os.getxattr(f, "user.pulse") == b"value", "xattr did not round-trip"
     return "user.pulse"
 
 

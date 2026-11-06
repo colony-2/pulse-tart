@@ -223,3 +223,91 @@ func TestUnreachableObservationIsError(t *testing.T) {
 		t.Fatal("unreachable allocation returned successful inventory")
 	}
 }
+
+func TestMacOSAllocationVerifiesShareAndPreservesPrimaryFacts(t *testing.T) {
+	var starts atomic.Int32
+	var checks atomic.Int32
+	var delivery atomic.Value
+	addr, _, _ := testSSH(t, func(command string, body []byte) string {
+		if strings.Contains(command, "Linux/aarch64") {
+			return "private-engine-id\n"
+		}
+		if strings.Contains(command, "check-workspace.py") {
+			checks.Add(1)
+			return ""
+		}
+		if strings.Contains(command, "accept.py") {
+			starts.Add(1)
+			delivery.Store(append([]byte(nil), body...))
+			return "PULSE_DOCKER_ACCEPTED\n"
+		}
+		return "boot-id\nprivate-engine-id\n"
+	})
+	guest := Guest{VM: "primary", Address: addr, User: "admin", Password: "test"}
+	engine := guest
+	engine.VM = "companion"
+	cfg := Config{Enabled: true, StateDir: t.TempDir(), NativeID: "mac-uid", Base: "macos-tahoe-26.6.2-arm64", Image: "registry/image@sha256:" + strings.Repeat("a", 64), CPU: 4, MemoryMiB: 7680, Guest: guest, Engine: engine, EngineNativeID: "engine-uid", Workspace: "/Users/Shared/pulse/work/jobs/owned"}
+	p, err := NewMacOS(t.Context(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if checks.Load() != 3 {
+		t.Fatal("missing shared workspace round-trip", checks.Load())
+	}
+	before := checks.Load()
+	caps, err := p.GetCapabilities(t.Context())
+	if err != nil || caps.Bases[0].Name != cfg.Base || checks.Load() != before {
+		t.Fatal(caps, err)
+	}
+	l := api.Launch{LaunchID: "mac-job", Allocation: api.Allocation{Base: "macos-*", Capabilities: []string{"docker"}}, Job: api.JobRef{JobDB: "http://jobdb.invalid", JobID: "job", TenantID: "tenant", InstanceID: "instance"}, Lease: "opaque"}
+	result, err := p.Submit(t.Context(), []api.Launch{l})
+	if err != nil || result[0].Status != api.Accepted {
+		t.Fatal(result, err)
+	}
+	var payload struct {
+		Args      []string
+		Workspace string
+	}
+	if err = json.Unmarshal(delivery.Load().([]byte), &payload); err != nil {
+		t.Fatal(err)
+	}
+	argv := strings.Join(payload.Args, " ")
+	for _, fact := range []string{"--execution-platform darwin/arm64", "--execution-base " + cfg.Base, "--execution-cpu 4000m", "--execution-memory 7680Mi"} {
+		if !strings.Contains(argv, fact) {
+			t.Fatal("missing primary fact", fact, argv)
+		}
+	}
+	if payload.Workspace != cfg.Workspace {
+		t.Fatal(payload.Workspace)
+	}
+	listed, err := p.List(t.Context(), api.ListRequest{})
+	if err != nil || len(listed.Items) != 2 {
+		t.Fatal(listed, err)
+	}
+	for _, item := range listed.Items {
+		if item.Job != l.Job || item.LaunchID != l.LaunchID {
+			t.Fatal(item)
+		}
+	}
+	p.Close()
+	p, err = NewMacOS(t.Context(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	result, err = p.Submit(t.Context(), []api.Launch{l})
+	if err != nil || result[0].Status != api.Accepted || starts.Load() != 1 {
+		t.Fatal(result, err, starts.Load())
+	}
+}
+
+func TestMacOSAllocationRejectsWorkspaceEscapeBeforeSideEffects(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "state")
+	_, err := NewMacOS(t.Context(), Config{Enabled: true, StateDir: root, Workspace: "/Users/Shared/pulse/work/jobs/../../other", EngineNativeID: "engine", Engine: Guest{VM: "engine"}})
+	if err == nil {
+		t.Fatal("accepted escaping workspace")
+	}
+	if _, err = os.Stat(root); !os.IsNotExist(err) {
+		t.Fatal("invalid config created state")
+	}
+}

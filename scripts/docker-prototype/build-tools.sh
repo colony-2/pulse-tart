@@ -24,6 +24,8 @@ tar -xzf "$work/source.tar.gz" --strip-components=1 -C "$work/source"
 mkdir -p "$work/source/cmd/pulse-docker-fixture"
 cp "$root/experimental/docker/jobdb-fixture.go.txt" "$work/source/cmd/pulse-docker-fixture/main.go"
 (cd "$work/source" && GOWORK=off CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/colony-2/c2j/internal/buildinfo.version=$selected -X github.com/colony-2/c2j/internal/buildinfo.commit=$revision" -o "$out/c2j" ./cmd/c2j && GOWORK=off CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o "$out/jobdb-fixture" ./cmd/pulse-docker-fixture)
+(cd "$work/source" && GOWORK=off CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "-X github.com/colony-2/c2j/internal/buildinfo.version=$selected -X github.com/colony-2/c2j/internal/buildinfo.commit=$revision" -o "$out/c2j-darwin" ./cmd/c2j && GOWORK=off CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o "$out/jobdb-fixture-darwin" ./cmd/pulse-docker-fixture)
+"$root/scripts/docker-prototype/build-docker-clients.sh" "$out"
 (cd "$root" && go build -o "$out/tunnel" ./experimental/docker/cmd/tunnel && go build -o "$out/guest" ./experimental/docker/cmd/guest && go build -o "$out/allocation" ./experimental/docker/cmd/allocation)
 
 (cd "$root" && GOOS=darwin GOARCH=arm64 go build -o "$out/relay-darwin" ./experimental/docker/cmd/relay)

@@ -1,10 +1,58 @@
 # Experimental Docker allocations
 
 This prototype is isolated in `experimental/docker`. Normal macOS provider
-configuration and capabilities are unchanged. It establishes a working Linux
-Docker allocation and a macOS-to-Linux Docker API/network bridge. **It does not
-implement the complete macOS Docker allocation contract.** See
+configuration and capabilities are unchanged. It includes the demonstrated Linux
+Docker allocation/API bridge and a new macOS c2j shared-workspace path awaiting
+live Mac validation. **It does not implement the complete production macOS Docker
+allocation contract.** See
 [detailed findings](docker-prototype-findings.md) before using the results.
+
+## Focused macOS execution test
+
+On the Apple Silicon Mac, run:
+
+```sh
+./scripts/test-macos-docker.sh
+```
+
+This prepares one macOS template, then runs two fresh macOS/Linux pairs
+sequentially. Each macOS primary executes a real supplied JobDB lease through
+`NewMacOS` and the shared provider API. It installs native CLI/Buildx/Compose,
+runs c2j as `pulseworker`, and checks real builds, Compose, SDK forwarding,
+checkout and TMPDIR binds against an allocation-private Linux engine. Native
+CLI/Buildx are built from upstream source; Compose uses its upstream Darwin
+release with its published SHA256 verified (its watcher requires cgo).
+
+To test warm macOS clones from the same model:
+
+```sh
+./scripts/test-macos-docker.sh --lifecycle suspended
+```
+
+The default is `--lifecycle cold`. Suspended mode must preserve the template's
+boot identity and shared mount while running both real jobs; it cannot silently
+fall back to cold boot. Linux always cold-boots. Optional `--slots 2` exercises
+two distinct templates **sequentially**, not two concurrent pairs; the latter
+remains unverified. Each job has a fresh primary and companion.
+
+A slot owns a stable host share directory for the lifetime of its template.
+The provider mounts it at `/Users/Shared/pulse/work` in both guests and places
+jobs under `jobs/<allocation>/tmp`. It never swaps or renames the share root.
+Only after both job VMs are deleted does it remove that job's directory. The
+next generation must see no old job directory, and the root inode must match.
+Cleanup rejects symlinked/replaced roots and `jobs` directories.
+
+A focused report declares `scope: macos-workspace` and lists `required_cases`.
+Exit 0 means this workflow passed; `complete: false` still means the **full**
+prototype contract has outstanding cases. Filesystem diagnostics (including
+locking and case behavior), UDP, callbacks and the broader failure matrix are
+not silently declared passing. Full-suite behavior remains unchanged. Both
+report and archive messages use paths beginning with `test-results/`.
+
+The new flow has been built and unit-tested on Linux, including cross-compiling
+macOS c2j/tools. It has not yet been run on the Mac. Build/download time varies;
+the two jobs themselves deliberately wait 65 seconds each to exercise lease
+renewals. Send the generated archive after running it.
 
 ## Run real-machine experiments
 
@@ -37,10 +85,10 @@ production controller authentication.
 Both entry points snapshot the source they test, write source hashes and
 `report.json`, capture logs, and produce an ignored `test-results/*.tar.gz`.
 Exit **2** means failed or incomplete requested coverage. An unrun case is never
-counted as passing. The current prototype is expected to exit 2 even where all
-implemented checks work. The full Orchard run took about nine minutes; image
+counted as passing. The full-contract suite is expected to exit 2 even where all
+implemented checks work. The focused suite above reports its narrower scope. The full Orchard run took about nine minutes; image
 pulls/package downloads and failures can add several minutes. Every guest command
-and polling stage is bounded. Local Tart has not been executed here.
+and polling stage is bounded. A returned local Tart run confirmed basic shared visibility; see the findings.
 
 For a shorter API/network-only check (still explicitly incomplete):
 
@@ -88,6 +136,13 @@ base and verified allocation facts. TMPDIR places its actual checkout under
 remain outside that tree. Cancellation/abandonment reconciliation is not yet a
 production service: the harness owns teardown.
 
+`docker.NewMacOS` additionally takes the companion Guest/native identity and a
+per-allocation Workspace. Construction checks the concrete macOS version,
+primary resources, matching engine identity, and a primary/companion/container
+filesystem round-trip. c2j receives only the primary CPU/memory and concrete
+macOS base. Both VMs appear in List with the same LaunchID/JobRef; the lease goes
+only to macOS. This remains a prepared-pair adapter, not an automatic pool.
+
 The macOS relay exposes a real local Unix socket and conventional
 `/var/run/docker.sock`. A fresh per-allocation SSH key and pinned engine host key
 protect the engine connection. When sibling networking is isolated, an explicit
@@ -99,6 +154,7 @@ container. UDP, reverse callbacks and full Docker compatibility are unfinished.
 
 The local Tart suite includes initial virtiofs visibility, filesystem primitives,
 host-directory replacement and suspend probes. It does not yet implement the
-full cross-guest filesystem/snapshot matrix or real macOS c2j execution. Orchard
+full cross-guest filesystem/snapshot matrix in the full diagnostic suite. The focused suite now implements real macOS c2j
+execution and stable-root cold/suspended clones, pending the next Mac run. Orchard
 shared-workspace tests are blocked by missing scoped workspace provisioning and
 disabled hostDirs in the available lab. No SSHFS/NFS fallback was substituted.

@@ -3,6 +3,7 @@ package docker
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -22,7 +23,7 @@ import (
 	api "github.com/colony-2/pulse-provider-api"
 )
 
-// Config deliberately describes ONE disposable, prepared Linux allocation.
+// Config describes ONE disposable, prepared Linux VM or macOS/Linux pair.
 // Its VM must never be assigned another job. The experiment harness owns native
 // provisioning/deletion. A production pool/pair allocator is not implemented.
 type Config struct {
@@ -30,6 +31,10 @@ type Config struct {
 	StateDir, Base, Image, NativeID string
 	CPU, MemoryMiB                  int64
 	Guest                           Guest
+	Workspace                       string
+	Engine                          Guest
+	EngineNativeID                  string
+	platform                        string
 }
 type Provider struct {
 	mu     sync.Mutex
@@ -47,8 +52,31 @@ type entry struct {
 var _ api.Provider = (*Provider)(nil)
 
 func NewLinux(ctx context.Context, c Config) (*Provider, error) {
-	if !c.Enabled || !filepath.IsAbs(c.StateDir) || c.CPU < 1 || c.CPU > 1024 || c.MemoryMiB < 1024 || c.MemoryMiB > 1048576 || !regexp.MustCompile(`^ubuntu-[0-9.]+-arm64$`).MatchString(c.Base) || !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.:/_-]*@sha256:[a-f0-9]{64}$`).MatchString(c.Image) || c.NativeID == "" {
-		return nil, fmt.Errorf("invalid or disabled experimental Linux configuration")
+	c.platform = "linux"
+	if c.Workspace == "" {
+		c.Workspace = "/Users/pulseworker/work"
+	}
+	return newAllocation(ctx, c)
+}
+
+// NewMacOS verifies a prepared macOS primary, its private Linux companion and
+// their shared workspace before advertising Docker. Provisioning is owned by
+// the experimental harness. No lease is delivered to the companion.
+func NewMacOS(ctx context.Context, c Config) (*Provider, error) {
+	c.platform = "darwin"
+	if c.EngineNativeID == "" || c.Engine.VM == "" || c.Engine.VM == c.Guest.VM || !regexp.MustCompile(`^/Users/Shared/pulse/work/jobs/[A-Za-z0-9_-]+$`).MatchString(c.Workspace) {
+		return nil, fmt.Errorf("invalid macOS paired allocation")
+	}
+	return newAllocation(ctx, c)
+}
+func newAllocation(ctx context.Context, c Config) (*Provider, error) {
+	basePattern := `^ubuntu-[0-9.]+-arm64$`
+	if c.platform == "darwin" {
+		basePattern = `^macos-tahoe-[0-9.]+-arm64$`
+	}
+
+	if !c.Enabled || !filepath.IsAbs(c.StateDir) || c.CPU < 1 || c.CPU > 1024 || c.MemoryMiB < 1024 || c.MemoryMiB > 1048576 || !regexp.MustCompile(basePattern).MatchString(c.Base) || !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.:/_-]*@sha256:[a-f0-9]{64}$`).MatchString(c.Image) || c.NativeID == "" {
+		return nil, fmt.Errorf("invalid or disabled experimental allocation configuration")
 	}
 	if err := os.MkdirAll(c.StateDir, 0700); err != nil {
 		return nil, err
@@ -62,7 +90,7 @@ func NewLinux(ctx context.Context, c Config) (*Provider, error) {
 		return nil, fmt.Errorf("experimental state is already in use")
 	}
 	p := &Provider{cfg: c, file: f}
-	scope, _ := json.Marshal([]any{c.NativeID, c.Guest.VM, c.Guest.OrchardURL, c.Guest.Address, c.Base, c.Image, c.CPU, c.MemoryMiB})
+	scope, _ := json.Marshal([]any{c.NativeID, c.Guest.VM, c.Guest.OrchardURL, c.Guest.Address, c.Base, c.Image, c.CPU, c.MemoryMiB, c.platform, c.Workspace, c.EngineNativeID, c.Engine.VM, c.Engine.OrchardURL})
 	sum := sha256.Sum256(scope)
 	scope = []byte(hex.EncodeToString(sum[:]))
 	scopeFile := filepath.Join(c.StateDir, "scope")
@@ -95,10 +123,39 @@ func NewLinux(ctx context.Context, c Config) (*Provider, error) {
 	// Verify allocation facts before advertising Docker or handing off a lease.
 	probe := fmt.Sprintf("test \"$(uname -s)/$(uname -m)\" = Linux/aarch64 && test \"$(nproc)\" -ge %d && test \"$(awk '/MemTotal/{print $2}' /proc/meminfo)\" -ge %d && sudo -u pulseworker docker --host unix:///var/run/docker.sock info >/dev/null && sudo -u pulseworker docker buildx version >/dev/null && sudo -u pulseworker docker compose version >/dev/null && test -x /opt/pulse-docker/c2j", c.CPU, c.MemoryMiB*1024)
 	probe = ". /etc/os-release; test \"$ID\" = ubuntu && test \"$VERSION_ID\" = " + strings.TrimSuffix(strings.TrimPrefix(c.Base, "ubuntu-"), "-arm64") + " && " + probe + " && git --version >/dev/null && cat /proc/sys/kernel/random/boot_id && sudo -u pulseworker docker --host unix:///var/run/docker.sock info --format '{{.ID}}'"
+	if c.platform == "darwin" {
+		version := strings.TrimSuffix(strings.TrimPrefix(c.Base, "macos-tahoe-"), "-arm64")
+		probe = fmt.Sprintf("test \"$(uname -s)/$(uname -m)\" = Darwin/arm64 && test \"$(sw_vers -productVersion)\" = %s && test \"$(sysctl -n hw.ncpu)\" -ge %d && test \"$(sysctl -n hw.memsize)\" -ge %d && test -x /opt/pulse-docker/c2j && git --version >/dev/null && sudo -u pulseworker env HOME=/Users/pulseworker PATH=/usr/local/bin:/usr/bin:/bin docker info >/dev/null && sudo -u pulseworker env HOME=/Users/pulseworker PATH=/usr/local/bin:/usr/bin:/bin docker buildx version >/dev/null && sudo -u pulseworker env HOME=/Users/pulseworker PATH=/usr/local/bin:/usr/bin:/bin docker compose version >/dev/null && sysctl -n kern.bootsessionuuid && sudo -u pulseworker /usr/local/bin/docker info --format '{{.ID}}'", version, c.CPU, c.MemoryMiB<<20)
+	}
 	var identity bytes.Buffer
 	if err = c.Guest.Exec(ctx, probe, nil, &identity, io.Discard); err != nil {
 		p.Close()
-		return nil, fmt.Errorf("Linux Docker allocation verification failed")
+		return nil, fmt.Errorf("Docker allocation verification failed")
+	}
+	if c.platform == "darwin" {
+		var engineIdentity bytes.Buffer
+		err = c.Engine.Exec(ctx, `test "$(uname -s)/$(uname -m)" = Linux/aarch64 && sudo -u pulseworker docker info --format '{{.ID}}'`, nil, &engineIdentity, io.Discard)
+		primaryIDs := strings.Fields(identity.String())
+		if err != nil || len(primaryIDs) != 2 || strings.TrimSpace(engineIdentity.String()) != primaryIDs[1] {
+			p.Close()
+			return nil, fmt.Errorf("primary relay does not identify the configured private engine")
+		}
+		token := make([]byte, 16)
+		if _, err = rand.Read(token); err != nil {
+			p.Close()
+			return nil, err
+		}
+		nonce := hex.EncodeToString(token)
+		for _, step := range []struct {
+			guest Guest
+			mode  string
+		}{{c.Guest, "write"}, {c.Engine, "engine"}, {c.Guest, "finish"}} {
+			command := "sudo -u pulseworker env HOME=/Users/pulseworker PATH=/usr/local/bin:/usr/bin:/bin /usr/bin/python3 /opt/pulse-docker/check-workspace.py " + step.mode + " " + c.Workspace + " " + nonce
+			if err = step.guest.Exec(ctx, command, nil, io.Discard, io.Discard); err != nil {
+				p.Close()
+				return nil, fmt.Errorf("shared workspace/container verification failed at %s", step.mode)
+			}
+		}
 	}
 	identityFile := filepath.Join(c.StateDir, "engine-identity")
 	if previous, err := os.ReadFile(identityFile); err == nil {
@@ -163,6 +220,12 @@ func (p *Provider) save() error {
 	}
 	defer d.Close()
 	return d.Sync()
+}
+func (p *Provider) executionPlatform() string {
+	if p.cfg.platform == "darwin" {
+		return "darwin/arm64"
+	}
+	return "linux/arm64"
 }
 func validEndpoint(raw string) bool {
 	u, err := url.Parse(raw)
@@ -234,8 +297,8 @@ func (p *Provider) Submit(ctx context.Context, ls []api.Launch) ([]api.Submissio
 		if err := p.save(); err != nil {
 			return out, err
 		}
-		args := []string{"/opt/pulse-docker/c2j", "run", "with-lease", "--jobdb", l.Job.JobDB, "--job-id", l.Job.JobID, "--lease-file", "-", "--ci", "--input-mode", "fail", "--execution-base", p.cfg.Base, "--execution-cpu", strconv.FormatInt(p.cfg.CPU*1000, 10) + "m", "--execution-memory", strconv.FormatInt(p.cfg.MemoryMiB, 10) + "Mi", "--execution-platform", "linux/arm64", "--execution-image", p.cfg.Image, "--execution-image-digest", strings.Split(p.cfg.Image, "@")[1], "--execution-capability", "docker", "--execution-capability", "git"}
-		payload, _ := json.Marshal(map[string]any{"id": l.LaunchID, "hash": hash, "args": args, "lease": base64.StdEncoding.EncodeToString(lease)})
+		args := []string{"/opt/pulse-docker/c2j", "run", "with-lease", "--jobdb", l.Job.JobDB, "--job-id", l.Job.JobID, "--lease-file", "-", "--ci", "--input-mode", "fail", "--execution-base", p.cfg.Base, "--execution-cpu", strconv.FormatInt(p.cfg.CPU*1000, 10) + "m", "--execution-memory", strconv.FormatInt(p.cfg.MemoryMiB, 10) + "Mi", "--execution-platform", p.executionPlatform(), "--execution-image", p.cfg.Image, "--execution-image-digest", strings.Split(p.cfg.Image, "@")[1], "--execution-capability", "docker", "--execution-capability", "git"}
+		payload, _ := json.Marshal(map[string]any{"id": l.LaunchID, "hash": hash, "args": args, "lease": base64.StdEncoding.EncodeToString(lease), "workspace": p.cfg.Workspace})
 		var response bytes.Buffer
 		err := p.cfg.Guest.Exec(ctx, "sudo /usr/bin/python3 /opt/pulse-docker/accept.py", bytes.NewReader(payload), &response, io.Discard)
 		result.Status = api.Unknown
@@ -265,12 +328,20 @@ func (p *Provider) List(ctx context.Context, q api.ListRequest) (api.ListRespons
 	if p.entry == nil || (q.LaunchID != "" && q.LaunchID != p.entry.ID) {
 		return out, nil
 	}
+	if p.cfg.platform == "darwin" {
+		if err := p.cfg.Engine.Exec(ctx, "true", nil, io.Discard, io.Discard); err != nil {
+			return out, fmt.Errorf("companion observation unavailable")
+		}
+	}
 	var b bytes.Buffer
 	if err := p.cfg.Guest.Exec(ctx, "if sudo test -f /var/lib/pulse-docker/exit; then echo done; else echo active; fi", nil, &b, io.Discard); err != nil {
 		return out, fmt.Errorf("allocation observation unavailable")
 	}
 	if strings.TrimSpace(b.String()) != "done" {
 		out.Items = append(out.Items, api.Instance{ID: p.cfg.Guest.VM, LaunchID: p.entry.ID, Job: p.entry.Job, State: "running", Refs: []string{p.cfg.Guest.VM}})
+		if p.cfg.platform == "darwin" {
+			out.Items = append(out.Items, api.Instance{ID: p.cfg.Engine.VM, LaunchID: p.entry.ID, Job: p.entry.Job, State: "running", Refs: []string{p.cfg.Engine.VM}})
+		}
 	}
 	return out, nil
 }
