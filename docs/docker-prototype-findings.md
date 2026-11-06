@@ -32,6 +32,43 @@ contents cleaned only after all old guests/readers are gone is a candidate to
 test; it is not yet a proven reusable-template design. The existing Orchard
 workspace-provisioning limitation is unchanged.
 
+## Focused run at 20:10 UTC — shared-file content mismatch
+
+`20261106T201055Z-docker-tart-86731` passed the repaired tool/resource/engine
+checks and reached the shared-workspace round-trip. Admission stopped with
+`shared workspace/container verification failed at finish: AssertionError`.
+No c2j lease was handed off. The host/primary/engine fresh-marker checks passed;
+all three owned VMs have cleanup samples and no cleanup error is recorded.
+
+The old `finish` probe had two assertions: macOS rereading an existing file
+modified by Linux, and macOS reading a new container-written file. The archive
+does not identify which assertion failed or include actual/expected bytes, so
+cache incoherence is a hypothesis, not yet a proven root cause. Assertions now
+have distinct safe diagnostic codes. The admission guard remains strict; it does
+not retry until stale data happens to match or weaken the expected contents.
+
+A new `scripts/test-macos-docker-filesystem.sh` reproduces the relevant file
+operations without compiling c2j or macOS Docker tools. Sixteen plain-guest
+cases distinguish write/close from fsync and atomic replacement in both
+directions, with reader-origin and writer-origin files. It records backing-host
+and guest hashes, first versus delayed observations, and remount diagnostics.
+Only if those pass does it install a private Linux Engine and test container
+writes. It does not change host security settings or mount policy globally.
+
+[Tart issue #1271](https://github.com/openai/tart/issues/1271) independently
+reports stale/corrupted reads after external modifications in macOS virtiofs
+guests, including disruptive remount workarounds. That is related evidence, not
+proof that this allocation has the same defect. If the short test confirms it,
+the current dual-virtiofs workspace should remain unavailable for general Docker
+jobs; passing fresh-file visibility is insufficient. A private network-filesystem
+variant with one authoritative workspace is then a candidate to evaluate. No
+SSHFS/NFS implementation or full filesystem compatibility is claimed here.
+
+Local verification covers the diagnostic's native-file operations, preserving
+failed first reads when later reads succeed, named admission errors, cleanup,
+wrapper archives/relative paths, and repository Go race tests/vet. The Mac
+coherence reproduction itself still requires the next host run.
+
 ## Focused runs at 02:04 and 02:19 UTC — common preflight bug
 
 Both `20261106T020428Z-docker-tart-19927` (cold) and

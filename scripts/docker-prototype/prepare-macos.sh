@@ -18,6 +18,7 @@ fi
 mkdir -p /Users/pulseworker/.docker/cli-plugins /var/lib/pulse-docker /usr/local/bin
 chown -R pulseworker:pulseworker /Users/pulseworker
 chmod 700 /Users/pulseworker /var/lib/pulse-docker
+if [[ ${1:-} == --user-only ]]; then exit 0; fi
 chmod 755 /opt/pulse-docker
 chmod 755 /opt/pulse-docker/c2j /opt/pulse-docker/jobdb-fixture /opt/pulse-docker/engine-contract.sh /opt/pulse-docker/docker /opt/pulse-docker/docker-buildx /opt/pulse-docker/docker-compose
 ln -sf /opt/pulse-docker/docker /usr/local/bin/docker

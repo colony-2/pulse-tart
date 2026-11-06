@@ -7,6 +7,34 @@ live Mac validation. **It does not implement the complete production macOS Docke
 allocation contract.** See
 [detailed findings](docker-prototype-findings.md) before using the results.
 
+## Investigate shared-file consistency first
+
+The latest run (`20261106T201055Z-docker-tart-86731`) passes tool/permission
+admission but fails a shared-file content assertion before c2j starts. Run the
+smaller reproduction before another complete job suite:
+
+```sh
+./scripts/test-macos-docker-filesystem.sh
+```
+
+This builds only the SSH helper and boots two disposable VMs with the same
+virtiofs setup. It does not build c2j, macOS Docker CLI/plugins, or a JobDB fixture.
+It checks both directions, reader-created and writer-created files, same-size
+and growing overwrites, explicit fsync, and atomic replacement. The report
+records first-read bytes/hashes, host backing-file observations, delayed reads,
+and diagnostic remounts. A failed first read stays failed even if waiting or
+remounting makes it correct later. These are synthetic fixtures, not user files.
+
+If plain guest sharing passes, it installs Docker Engine in its private Linux
+VM and tests container creation/overwrite through a normal bind mount. If plain
+sharing fails, Docker setup is skipped and explicitly marked `not_run`.
+
+Inspect `filesystem-coherence.json` in the generated archive. Scope is
+`filesystem-coherence`, with explicit required cases and `complete: false` for
+the full contract. This is a diagnostic, not a workaround: ordinary jobs cannot
+be required to remount their workspace or sleep after every file write. VM
+cleanup and relative `test-results/...` output follow the other scripts.
+
 ## Focused macOS execution test
 
 On the Apple Silicon Mac, run:

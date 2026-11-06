@@ -4,6 +4,20 @@
 import os, pathlib, subprocess, sys
 
 
+class WorkspaceCheckError(RuntimeError):
+    def __init__(self, code):
+        self.code = code
+        super().__init__(code)
+
+
+def require_contents(path, expected, code, strip=False):
+    observed = path.read_text()
+    if strip:
+        observed = observed.strip()
+    if observed != expected:
+        raise WorkspaceCheckError(code)
+
+
 def main():
     mode, raw, nonce = sys.argv[1:]
     root = pathlib.Path("/Users/Shared/pulse/work").resolve()
@@ -23,12 +37,10 @@ def main():
             f.flush()
             os.fsync(f.fileno())
     elif mode == "engine":
-        assert p.read_text() == nonce, "engine cannot read primary workspace"
+        require_contents(p, nonce, "EngineCannotReadPrimaryWrite")
         p.write_text("engine-" + nonce)
     elif mode == "finish":
-        assert p.read_text() == "engine-" + nonce, (
-            "primary cannot read engine workspace"
-        )
+        require_contents(p, "engine-" + nonce, "PrimaryCannotReadEngineOverwrite")
         subprocess.run(
             [
                 "docker",
@@ -49,8 +61,8 @@ def main():
             check=True,
         )
         marker = work / (".container-" + nonce)
-        assert marker.read_text().strip() == "container", (
-            "primary cannot read container workspace"
+        require_contents(
+            marker, "container", "PrimaryCannotReadContainerWrite", strip=True
         )
         marker.unlink()
         p.unlink()
@@ -63,7 +75,11 @@ if __name__ == "__main__":
         main()
     except Exception as error:
         # Do not include file contents, argv or lease data in admission errors.
-        code = type(error).__name__
+        code = (
+            error.code
+            if isinstance(error, WorkspaceCheckError)
+            else type(error).__name__
+        )
         number = getattr(error, "errno", None)
         if isinstance(number, int) and number >= 0:
             code += " errno=" + str(number)

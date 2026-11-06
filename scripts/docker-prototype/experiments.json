@@ -42,5 +42,7 @@
   "private_prune": "Prune private engine without affecting other allocation or infrastructure",
   "amd64": "Optional AMD64 emulation, separately reported",
   "stable_workspace_generations": "Two fresh macOS c2j allocations per slot, stable root inode, old guest teardown before removing job data",
-  "macos_shared_resume": "macOS suspended-template clones restore boot identity and share visibility across two jobs"
+  "macos_shared_resume": "macOS suspended-template clones restore boot identity and share visibility across two jobs",
+  "shared_file_coherence": "Immediate cross-guest read-after-write, same-size/growing/atomic writes, writer close versus fsync; retries/remounts are diagnostics only",
+  "shared_container_coherence": "Private Linux container writes and overwrites through a bind mount; immediate macOS reads"
 }

@@ -14,6 +14,11 @@ p.add_argument("--rounds", type=int, default=2)
 p.add_argument("--adopt-engine")
 p.add_argument("--relay-only", action="store_true")
 p.add_argument(
+    "--filesystem-only",
+    action="store_true",
+    help="shared-file coherence reproduction without Docker or c2j",
+)
+p.add_argument(
     "--macos-workspace",
     action="store_true",
     help="focused cold/suspended shared-workspace and macOS c2j tests",
@@ -26,6 +31,8 @@ p.add_argument(
 )
 p.add_argument("--lifecycle", choices=["cold", "suspended"], default="cold")
 a = p.parse_args()
+if a.filesystem_only and (a.macos_workspace or a.relay_only or a.adopt_engine):
+    p.error("filesystem-only cannot be combined with another focused mode")
 if a.rounds < 1:
     p.error("rounds must be positive")
 OUT = pathlib.Path(a.output).resolve()
@@ -870,7 +877,13 @@ try:
             )
         )
         report["host_os"] = cmd(["sw_vers"]).stdout.decode()
-    if a.macos_workspace:
+    if a.filesystem_only:
+        if a.backend != "tart":
+            raise RuntimeError("filesystem reproduction requires the Mac host")
+        from coherence import run_coherence
+
+        run_coherence(globals())
+    elif a.macos_workspace:
         if a.backend != "tart":
             raise RuntimeError(
                 "shared-workspace suite requires the Mac host; Orchard scoped workspace provisioning is unavailable"
@@ -1111,12 +1124,18 @@ finally:
             value["reason"] = (
                 "Coverage remains unimplemented or unavailable; see findings. This is not a passing result."
             )
-    report["scope"] = "macos-workspace" if a.macos_workspace else "full-contract"
+    report["scope"] = (
+        "filesystem-coherence"
+        if a.filesystem_only
+        else ("macos-workspace" if a.macos_workspace else "full-contract")
+    )
     report["complete"] = all(
         c["status"] == "passed" for k, c in report["cases"].items() if k != "amd64"
     )
     required = list(report["cases"])
-    if a.macos_workspace:
+    if a.filesystem_only:
+        required = ["shared_file_coherence", "shared_container_coherence"]
+    elif a.macos_workspace:
         required = [
             "macos_c2j_workspace",
             "macos_shared_mounts",

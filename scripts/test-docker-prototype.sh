@@ -19,8 +19,20 @@ files={str(p.relative_to(source)):hashlib.sha256(p.read_bytes()).hexdigest() for
 PYTHON
 cd "$out/source"
 tools=$(mktemp -d /tmp/pulse-docker-tools.XXXXXX)
+filesystem_only=false
+for arg in "$@"; do
+  if [[ $arg == --filesystem-only ]]; then filesystem_only=true; fi
+done
+build_tools() {
+  if "$filesystem_only"; then
+    go build -o "$tools/guest" ./experimental/docker/cmd/guest || return $?
+    printf '%s\n' '{"tool_profile":"filesystem-only","c2j":"not built","docker":"not built"}' > "$tools/build.json"
+  else
+    ./scripts/docker-prototype/build-tools.sh "$tools" "${PULSE_TEST_C2J_VERSION:-latest}"
+  fi
+}
 echo "Building test tools; log: $display_out/build.log"
-./scripts/docker-prototype/build-tools.sh "$tools" "${PULSE_TEST_C2J_VERSION:-latest}" > "$out/build.log" 2>&1 || {
+build_tools > "$out/build.log" 2>&1 || {
   python3 - "$out" <<'PYTHON'
 import json,pathlib,sys
 out=pathlib.Path(sys.argv[1]);cases=json.loads(pathlib.Path("scripts/docker-prototype/experiments.json").read_text())
