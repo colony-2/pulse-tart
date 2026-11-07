@@ -12,7 +12,7 @@ MARKERS = ("JOBDB_VALID_PASS:", "JOBDB_REPLAY_PASS:", "JOBDB_EXPIRED_PASS:")
 
 def source_files(root):
     files = list(root.glob("*.go")) + [root / p for p in ("go.mod", "go.sum", "flake.nix", "flake.lock", "bases.json")]
-    for directory in ("internal", "guest", "scripts", "tests"):
+    for directory in ("internal", "guest", "scripts", "tests", "experimental"):
         files.extend(p for p in (root / directory).rglob("*")
                      if p.is_file() and "__pycache__" not in p.parts)
     return sorted(files)

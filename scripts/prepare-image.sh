@@ -38,7 +38,7 @@ for file in install-guest.sh select-c2j.sh flake.nix flake.lock profile; do
   [[ -f "$bundle/$file" ]] || { echo "Missing bundle file: $file" >&2; exit 1; }
 done
 profile=$(cat "$bundle/profile")
-[[ $profile == default || $profile == integration ]] || { echo 'Unknown guest bundle profile.' >&2; exit 1; }
+[[ $profile == default || $profile == integration || $profile == docker || $profile == docker-integration ]] || { echo 'Unknown guest bundle profile.' >&2; exit 1; }
 # Refuse previously used workers. Never reset execution intent or delete leases.
 for label in dev.pulse-tart.bootstrap dev.pulse-tart.guest; do
   if [[ -e /Library/LaunchDaemons/$label.plist ]] || launchctl print "system/$label" >/dev/null 2>&1; then

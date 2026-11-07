@@ -54,21 +54,29 @@ func (p *Provider) slotTargets() (map[string]slotTarget, error) {
 	targets := map[string]slotTarget{}
 	for _, group := range p.Config.Slots {
 		img := p.base(group.Base)
+		if img.OS == "linux" {
+			continue
+		}
 		spec := p.sourceSpec(img, group.CPU, group.MemoryMiB)
-		if image := p.Store.data.Images[config.BaseImageName(p.Config.OwnerID, img.Name)]; image != nil && image.Phase == "ready" {
+		if image := p.Store.data.Images[p.baseImageName(img.Name)]; image != nil && image.Phase == "ready" {
 			spec.Image = image.LocalName
 		} else {
 			spec.Image = ""
 		}
 		spec.StartupScript.Content = templateStartup(int(p.Config.BootstrapTimeout.Seconds()), img)
 		target := slotTarget{spec: spec, image: group.Base, worker: p.Config.Worker, hash: p.Store.hash(struct {
-			Base        config.Base
-			CPU, Memory int64
-			Group       string
-		}{img, group.CPU, group.MemoryMiB, group.Name})}
+			Base          config.Base
+			CPU, Memory   int64
+			Group         string
+			DockerProfile string `json:",omitempty"`
+		}{img, group.CPU, group.MemoryMiB, group.Name, group.DockerProfile})}
 		for i := 0; i < group.Count; i++ {
 			t := target
-			t.spec.Name = config.SlotImageName(p.Config.OwnerID, group, i+1)
+			namingGroup := group
+			if group.DockerProfile != "" {
+				namingGroup.Name += "-docker-" + group.DockerProfile
+			}
+			t.spec.Name = config.SlotImageName(p.Config.OwnerID, namingGroup, i+1)
 			targets[fmt.Sprintf("%s-%04d", group.Name, i+1)] = t
 		}
 	}
@@ -82,6 +90,11 @@ func (p *Provider) cacheSlot(s *SlotRecord) {
 }
 
 func (p *Provider) slotBusy(id string) bool {
+	for _, pair := range p.Store.data.Pairs {
+		if pair.SlotID == id && pair.Phase != "gone" {
+			return true
+		}
+	}
 	for _, r := range p.Store.data.Records {
 		if r.SlotID == id && r.Phase != "done" {
 			return true
@@ -360,6 +373,9 @@ func (p *Provider) chooseSlot(ctx context.Context, l compute.Launch, spec backen
 	}
 	ids := []string{}
 	for id, t := range targets {
+		if p.dockerGroup(id).DockerProfile != "" {
+			continue
+		}
 		if baseMatches(p.base(t.image), l) && t.spec.CPU >= spec.CPU && t.spec.Memory >= spec.Memory {
 			ids = append(ids, id)
 		}

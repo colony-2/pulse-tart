@@ -7,3 +7,6 @@
 # Generated test reports and archives.
 /test-results/
 /tart-debug-*.log
+
+# Python test/compiler caches.
+__pycache__/

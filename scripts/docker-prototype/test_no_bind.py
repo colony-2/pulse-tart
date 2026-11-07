@@ -1,7 +1,7 @@
 import importlib.util
 import pathlib
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from types import SimpleNamespace
 
 ROOT = pathlib.Path(__file__).resolve().parent
@@ -27,7 +27,8 @@ class EndpointTest(unittest.TestCase):
         env = dict(a=SimpleNamespace(backend="orchard"), guest=guest, upload=lambda _,p,b: uploaded.update({p:b}),
                    native=native, api=api, wait=lambda _,f,seconds: f(),
                    URL='http://192.0.2.1:6120/v1', report={},save=lambda:None)
-        address, hostkey = module.endpoint_transport(env, vm)
+        with patch.dict("os.environ", {"PULSE_TEST_ENGINE_WORKER_ADDRESS": "192.0.2.1"}):
+            address, hostkey = module.endpoint_transport(env, vm)
         self.assertEqual(address, '192.0.2.1:45000')
         self.assertEqual(hostkey, b'pinned-server-key')
         config = uploaded['/opt/pulse-docker/endpoint-sshd.conf'].decode()

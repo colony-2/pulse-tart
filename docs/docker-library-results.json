@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-07",
+  "scope": "integrated public provider library",
+  "production_qualified": false,
+  "runs": [
+    {
+      "backend": "orchard",
+      "platform": "linux",
+      "result": "passed",
+      "archive": "test-results/20261107T040116Z-docker-library-orchard-75207.tar.gz",
+      "source_snapshot": "test-results/20261107T040116Z-docker-library-orchard-75207/source-sha256.json",
+      "jobdb": {
+        "claims": 1,
+        "output_ok": true,
+        "renewals": 10,
+        "secret_calls": 1,
+        "status": "COMPLETED"
+      },
+      "allocation_vms": 1,
+      "versions": {
+        "c2j_release": "v0.0.124",
+        "c2j_observed": "c2j version unstable-33e2a4d",
+        "docker_client": "29.8.1",
+        "docker_engine": "29.1.3",
+        "buildx": "github.com/docker/buildx v0.31.1",
+        "compose": "Docker Compose version 5.4.0"
+      }
+    },
+    {
+      "backend": "orchard",
+      "platform": "darwin",
+      "result": "passed",
+      "archive": "test-results/20261107T041044Z-docker-library-orchard-78046.tar.gz",
+      "source_snapshot": "test-results/20261107T041044Z-docker-library-orchard-78046/source-sha256.json",
+      "jobdb": {
+        "claims": 1,
+        "output_ok": true,
+        "renewals": 10,
+        "secret_calls": 1,
+        "status": "COMPLETED"
+      },
+      "allocation_vms": 2,
+      "versions": {
+        "c2j_release": "v0.0.124",
+        "c2j_observed": "c2j version unstable-33e2a4d",
+        "docker_client": "29.8.1",
+        "docker_engine": "29.1.3",
+        "buildx": "github.com/docker/buildx v0.31.1",
+        "compose": "Docker Compose version 5.4.0"
+      }
+    }
+  ],
+  "remaining_live_gates": [
+    "native Tart integrated allocator",
+    "native concurrent allocations",
+    "controller/worker crash injection",
+    "CPU/memory/private-disk pressure",
+    "cross-allocation prune isolation"
+  ]
+}

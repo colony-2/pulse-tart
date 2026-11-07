@@ -14,6 +14,7 @@ Options:
 
 | Option | Behavior |
 | --- | --- |
+| `--docker-profile NAME` | Prepare the Docker base and slots matching `SlotGroup.DockerProfile` |
 | `--c2j latest` | Default: resolve the latest published c2j release when preparing |
 | `--c2j <tag-or-commit>` | Build that selection; branches also work |
 | `--ensure` | Prepare only missing sources; reuse existing matching stopped/suspended images |
@@ -50,3 +51,5 @@ The library's `Config.C2JVersion` selects a release only when it must install a 
 The selector resolves a release/tag/branch to a commit before Nix builds it. Lookup errors fail preparation; there is no fallback to a library-pinned c2j. The selected tools are available under `/opt/pulse-tart/bin`. Inspect `c2j version` inside a disposable clone to see the installed version. There is no release manifest or version sidecar. The snapshot readiness file records boot UUID/MAC for restore verification, not software version.
 
 `build-bundle.sh` and the guest-side `prepare-image.sh` remain internal setup helpers. The archive contains shell scripts, Nix definitions and guest-launcher source. Nix fetches/builds c2j inside the VM. Normal library users and operators need only the configuration API or `update-macos-images.sh`.
+
+Docker sources use a separate prepared base and profile-specific slot names; see [Docker library setup](docker-library.md). The updater selects the same Nix Docker environment as initial library preparation.

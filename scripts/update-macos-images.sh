@@ -12,6 +12,7 @@ Usage: update-macos-images.sh --owner NAME [options]
   --slots COUNT       Number of suspended slots (default: 1)
   --cpu COUNT         CPU per slot (default: 4)
   --memory MIB        Memory per slot (default: 8192)
+  --docker-profile NAME  Config.SlotGroup.DockerProfile; prepare Docker client/relay sources
   --c2j VERSION       latest (default), release tag, branch, or commit
   --image REFERENCE --os-version VERSION  Custom digest-pinned macOS image
   --ssh-user USER     Guest SSH login (default: admin)
@@ -25,17 +26,17 @@ Existing job clones are never stopped, deleted, or modified.
 HELP
 }
 owner= base=macos-26-arm64 group=standard count=1 cpu=4 memory=8192 version=latest
-image= os_version= ssh_user=admin ensure=0 seconds=2700
+image= os_version= ssh_user=admin ensure=0 seconds=2700 docker_profile=
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --help|-h) usage; exit 0 ;;
     --ensure) ensure=1; shift; continue ;;
-    --owner|--base|--group|--slots|--cpu|--memory|--c2j|--image|--os-version|--ssh-user|--timeout)
+    --owner|--base|--group|--slots|--cpu|--memory|--docker-profile|--c2j|--image|--os-version|--ssh-user|--timeout)
       [[ $# -ge 2 ]] || { usage >&2; exit 2; }
       case "$1" in
         --owner) owner=$2 ;; --base) base=$2 ;; --group) group=$2 ;;
         --slots) count=$2 ;; --cpu) cpu=$2 ;; --memory) memory=$2 ;;
-        --c2j) version=$2 ;; --image) image=$2 ;; --os-version) os_version=$2 ;;
+        --docker-profile) docker_profile=$2 ;; --c2j) version=$2 ;; --image) image=$2 ;; --os-version) os_version=$2 ;;
         --ssh-user) ssh_user=$2 ;; --timeout) seconds=$2 ;;
       esac; shift 2 ;;
     *) usage >&2; exit 2 ;;
@@ -43,6 +44,7 @@ while [[ $# -gt 0 ]]; do
 done
 [[ $(uname -s) == Darwin && $(uname -m) == arm64 ]] || { echo 'Run on an Apple Silicon Mac.' >&2; exit 2; }
 [[ $owner =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && ${#owner} -le 64 && $group =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && ${#group} -le 32 ]]
+[[ -z $docker_profile || ( $docker_profile =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && ${#docker_profile} -le 128 ) ]]
 [[ $ssh_user =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
 for value in "$count" "$cpu" "$memory" "$seconds"; do [[ $value =~ ^[1-9][0-9]*$ && ${#value} -le 7 ]] || { echo 'Sizes/timeouts must be positive integers.' >&2; exit 2; }; done
 [[ $count -le 1000 && $cpu -le 256 && $memory -ge 1024 && $memory -le 1048576 && $seconds -ge 60 && $seconds -le 7200 ]]
@@ -61,7 +63,7 @@ PY
 fi
 [[ $image =~ ^[A-Za-z0-9][A-Za-z0-9.:/_-]*@sha256:[a-f0-9]{64}$ && $os_version =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || { echo 'Supply a valid image digest and macOS version.' >&2; exit 2; }
 names=()
-while IFS= read -r name; do names+=("$name"); done < <(python3 "$root/scripts/image-names.py" "$owner" "$base" "$group" "$cpu" "$memory" "$count")
+while IFS= read -r name; do names+=("$name"); done < <(python3 "$root/scripts/image-names.py" "$owner" "$base" "$group" "$cpu" "$memory" "$count" "$docker_profile")
 [[ ${#names[@]} -eq $((count+1)) ]]
 work=$(mktemp -d /tmp/pulse-image-update.XXXXXX)
 echo "Preparation logs: $work"
@@ -128,7 +130,9 @@ build_base=1
 if [[ $ensure == 1 ]] && valid_source "$base_source" stopped 4 8192; then build_base=0; fi
 if [[ $build_base == 1 ]]; then
   echo "Preparing base ${names[0]} with c2j $version"
-  "$root/scripts/build-bundle.sh" "$work/setup.tar.gz" "${PULSE_IMAGE_PROFILE:-default}" --c2j "$version"
+  profile=${PULSE_IMAGE_PROFILE:-default}
+  if [[ -n $docker_profile ]]; then if [[ $profile == integration ]]; then profile=docker-integration; else profile=docker; fi; fi
+  "$root/scripts/build-bundle.sh" "$work/setup.tar.gz" "$profile" --c2j "$version"
   base_source="pulse-build-$(date -u +%Y%m%dT%H%M%SZ)-$$-base"
   staged+=("$base_source")
   tart clone "$image" "$base_source"

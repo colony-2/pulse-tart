@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"sort"
 	"time"
 
@@ -29,6 +30,7 @@ type Provider struct {
 	Backend    Backend
 	Setup      func(context.Context) ([]byte, error)
 	BaseScript []byte
+	Assets     fs.FS
 }
 
 func New(c config.Settings, b Backend) (*Provider, error) {
@@ -131,6 +133,10 @@ func (p *Provider) Submit(ctx context.Context, ls []compute.Launch) ([]compute.S
 			out = append(out, result(l.LaunchID, compute.Unavailable))
 			continue
 		}
+		if submission, handled := p.submitDocker(ctx, l, hash); handled {
+			out = append(out, submission)
+			continue
+		}
 		spec, status := p.plan(l)
 		if status != compute.Accepted {
 			out = append(out, result(l.LaunchID, status))
@@ -193,6 +199,9 @@ func (p *Provider) plan(l compute.Launch) (backend.Spec, compute.Status) {
 	cpu := (l.CPUMillis + 999) / 1000
 	memory := (l.MemoryBytes + (1 << 20) - 1) / (1 << 20)
 	for _, g := range p.Config.Slots {
+		if g.DockerProfile != "" {
+			continue
+		}
 		b := p.base(g.Base)
 		if baseMatches(b, l) && g.CPU >= cpu && g.MemoryMiB >= memory {
 			return backend.Spec{Name: "pulse-" + p.Config.Scope()[:12] + "-" + newID(), CPU: cpu, Memory: memory}, compute.Accepted
@@ -247,6 +256,9 @@ func (p *Provider) Reconcile(ctx context.Context) error {
 		byName[v.Name] = v
 	}
 	for _, r := range p.Store.data.Records {
+		if r.PairID != "" {
+			continue
+		}
 		if r.Phase == "done" {
 			continue
 		}
@@ -303,7 +315,10 @@ func (p *Provider) Reconcile(ctx context.Context) error {
 	if e := p.reconcileImages(ctx); e != nil {
 		return e
 	}
-	return p.reconcileSlots(ctx)
+	if e := p.reconcileSlots(ctx); e != nil {
+		return e
+	}
+	return p.reconcilePairs(ctx)
 }
 func (p *Provider) List(ctx context.Context, q compute.ListRequest) (compute.ListResponse, error) {
 	if q.PageSize == 0 {
@@ -334,9 +349,14 @@ func (p *Provider) List(ctx context.Context, q compute.ListRequest) (compute.Lis
 	}
 	records := map[string]*Record{}
 	for _, r := range p.Store.data.Records {
-		records[r.Name] = r
+		if r.PairID == "" {
+			records[r.Name] = r
+		}
 	}
-	items := []compute.Instance{}
+	items, err := p.pairInstances(vs, q, after)
+	if err != nil {
+		return compute.ListResponse{}, err
+	}
 	for _, v := range vs {
 		r := records[v.Name]
 		if r == nil || r.Phase == "done" {

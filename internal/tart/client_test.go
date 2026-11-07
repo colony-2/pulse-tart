@@ -572,3 +572,27 @@ func TestDeletedReusableSourceCanBePreparedAgain(t *testing.T) {
 		t.Fatal("deleted source could not be rebuilt", err)
 	}
 }
+
+func TestLinuxDetachedRunDoesNotRequestUnsupportedSuspension(t *testing.T) {
+	b, _, _ := fixture(t)
+	binary := filepath.Join(t.TempDir(), "tart-linux-test")
+	if e := os.WriteFile(binary, []byte("#!/bin/sh\ntest \"$1 $2 $3\" = 'run --no-graphics linux' || exit 42\n"), 0700); e != nil {
+		t.Fatal(e)
+	}
+	b.cfg.Binary = binary
+	b.records["linux"] = &record{Spec: backend.Spec{OS: "linux"}}
+	if _, e := b.start("linux"); e != nil {
+		t.Fatal(e)
+	}
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
+		data, e := os.ReadFile(filepath.Join(b.dir, "linux.exit"))
+		if e == nil {
+			if strings.TrimSpace(string(data)) != "0" {
+				t.Fatal("Linux requested suspension")
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("run did not finish")
+}

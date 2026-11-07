@@ -36,12 +36,14 @@ type Config struct {
 	C2JVersion       string // Defaults to latest published release; existing images are reused.
 	PollInterval     time.Duration
 	BootstrapTimeout time.Duration
+	Docker           *Docker
 }
 
-// Base names a concrete macOS ARM64 environment. Image must be a digest-pinned
+// Base names a concrete ARM64 environment. Image must be a digest-pinned
 // Tart OCI reference. OSVersion is checked inside the template before readiness.
 type Base struct {
 	Name        string
+	OS          string // darwin (default) or linux; ARM64 only.
 	Image       string
 	OSVersion   string
 	SSHUsername string
@@ -53,11 +55,12 @@ type Base struct {
 }
 
 type SlotGroup struct {
-	Name      string
-	Count     int
-	Base      string
-	CPU       int64
-	MemoryMiB int64
+	Name          string
+	Count         int
+	Base          string
+	CPU           int64
+	MemoryMiB     int64
+	DockerProfile string // Empty disables Docker for this group.
 }
 
 // Orchard adds connectivity and placement only; the execution configuration is shared.
@@ -70,6 +73,7 @@ type Orchard struct {
 	CACert            []byte
 	AllowInsecureHTTP bool
 	RequestTimeout    time.Duration
+	DockerEndpoint    Endpoint
 }
 
 type Tart struct {
@@ -78,15 +82,18 @@ type Tart struct {
 	Home           string
 	CommandTimeout time.Duration
 	SSHTimeout     time.Duration
+	DockerEndpoint Endpoint
+	PythonBinary   string // Worker-local bridge supervisor; defaults to /usr/bin/python3.
 }
 
 // Settings is implementation-only: the public Config has no transport mode.
 type Settings struct {
 	Config
-	Kind         string
-	Endpoint     string
-	Worker       string
-	WorkerLabels map[string]string
+	Kind           string
+	Endpoint       string
+	Worker         string
+	WorkerLabels   map[string]string
+	DockerEndpoint Endpoint
 }
 
 func (c Settings) Scope() string {
@@ -140,6 +147,12 @@ func Normalize(c Config) (Config, error) {
 	seen := map[string]bool{}
 	for i := range c.Bases {
 		b := &c.Bases[i]
+		if b.OS == "" {
+			b.OS = "darwin"
+		}
+		if b.OS != "darwin" && b.OS != "linux" {
+			return Config{}, Err
+		}
 		if !BaseSelector(b.Name) || strings.Contains(b.Name, "*") || seen[b.Name] || !digestImage.MatchString(b.Image) || !osVersion.MatchString(b.OSVersion) || b.SSHPassword == "" {
 			return Config{}, Err
 		}
@@ -179,6 +192,9 @@ func Normalize(c Config) (Config, error) {
 	}
 	if c.Capacity() > 1000 {
 		return Config{}, Err
+	}
+	if err := normalizeDocker(&c); err != nil {
+		return Config{}, err
 	}
 	return c, nil
 }

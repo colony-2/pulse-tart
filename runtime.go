@@ -26,6 +26,9 @@ type Base = config.Base
 type SlotGroup = config.SlotGroup
 type OrchardConfig = config.Orchard
 type TartConfig = config.Tart
+type DockerConfig = config.Docker
+type DockerEngineProfile = config.EngineProfile
+type DockerEndpoint = config.Endpoint
 type Secret = config.Secret
 type SlotStatus = engine.SlotStatus
 type ImageStatus = engine.ImageStatus
@@ -61,6 +64,10 @@ func prepare(c Config) (Config, error) {
 
 func newRuntime(p *engine.Provider, c Config) *Runtime {
 	r := &Runtime{p: p, period: c.PollInterval, profile: "default"}
+	if c.Docker != nil {
+		r.profile = "docker"
+	}
+	p.Assets = assets
 	p.BaseScript, _ = assets.ReadFile("scripts/prepare-base.sh")
 	var setup []byte
 	p.Setup = func(ctx context.Context) ([]byte, error) {
@@ -84,13 +91,29 @@ func NewOrchard(c Config, connection OrchardConfig) (*Runtime, error) {
 	if !config.Name(connection.Worker) {
 		return nil, ErrConfig
 	}
+	if c.Docker != nil {
+		if e := connection.DockerEndpoint.Validate(); e != nil {
+			return nil, e
+		}
+	}
 	connection.WorkerLabels = maps.Clone(connection.WorkerLabels)
 	connection.CACert = slices.Clone(connection.CACert)
 	client, e := orchard.New(connection)
 	if e != nil {
 		return nil, e
 	}
-	settings := config.Settings{Config: c, Kind: "orchard", Endpoint: client.Base, Worker: connection.Worker, WorkerLabels: connection.WorkerLabels}
+	client.GuestKeys = map[string][]byte{}
+	for _, b := range c.Bases {
+		client.GuestKeys[b.Image] = b.SSHHostKey
+	}
+	if c.Docker != nil {
+		for _, p := range c.Docker.Profiles {
+			if len(client.GuestKeys[p.Image]) == 0 {
+				client.GuestKeys[p.Image] = p.SSHHostKey
+			}
+		}
+	}
+	settings := config.Settings{Config: c, Kind: "orchard", Endpoint: client.Base, Worker: connection.Worker, WorkerLabels: connection.WorkerLabels, DockerEndpoint: connection.DockerEndpoint}
 	p, e := engine.New(settings, client)
 	if e != nil {
 		return nil, e
@@ -113,7 +136,12 @@ func NewTart(c Config, options TartConfig) (*Runtime, error) {
 		return nil, ErrConfig
 	}
 	options.Home = filepath.Clean(options.Home)
-	settings := config.Settings{Config: c, Kind: "tart", Endpoint: options.Home, Worker: "local"}
+	if c.Docker != nil {
+		if e := options.DockerEndpoint.Validate(); e != nil {
+			return nil, e
+		}
+	}
+	settings := config.Settings{Config: c, Kind: "tart", Endpoint: options.Home, Worker: "local", DockerEndpoint: options.DockerEndpoint}
 	store, e := engine.OpenStore(c.StateDir, settings.Scope())
 	if e != nil {
 		return nil, e
@@ -151,7 +179,7 @@ func (r *Runtime) GetCapabilities(ctx context.Context) (api.Capabilities, error)
 	}
 	out := api.Capabilities{BasesComplete: true, Bases: make([]api.BaseCapabilities, 0, len(r.p.Config.Bases))}
 	for _, b := range r.p.Config.Bases {
-		out.Bases = append(out.Bases, api.BaseCapabilities{Name: b.Name, Capabilities: append([]string{}, b.Capabilities...)})
+		out.Bases = append(out.Bases, api.BaseCapabilities{Name: b.Name, Capabilities: append([]string{}, r.p.Config.BaseCapabilities(b.Name)...)})
 	}
 	return out, nil
 }
@@ -222,7 +250,7 @@ func (r *Runtime) Run(ctx context.Context) error {
 
 // Drain disables new admissions and retires slot reservations as jobs finish.
 // Published images remain available for reuse or explicit PurgeImages.
-// Call Reconcile until Slots is empty. It does not cancel active work.
+// Call Reconcile until Slots and DockerAllocations are empty. It does not cancel active work.
 func (r *Runtime) Drain(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -256,4 +284,26 @@ func (r *Runtime) PurgeImages(ctx context.Context) error {
 		return ErrClosed
 	}
 	return r.p.PurgeImages(ctx)
+}
+
+// DockerAllocations reports warming, running and reclaiming Docker resources.
+func (r *Runtime) DockerAllocations() ([]DockerStatus, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.closed {
+		return nil, ErrClosed
+	}
+	return r.p.DockerAllocations()
+}
+
+type DockerStatus = engine.DockerStatus
+
+// DefaultDockerEngine is the digest-pinned Ubuntu ARM64 profile qualified by the
+// prototype. Enabling it and assigning a slot group remain explicit decisions.
+func DefaultDockerEngine() DockerEngineProfile {
+	return DockerEngineProfile{Name: "standard", Image: "ghcr.io/cirruslabs/ubuntu@sha256:439ba447488fa19f9b1ed091602546b8cb32442abdb60bac4943a4d6c3dd2ffa", SSHUsername: "admin", SSHPassword: "admin", CPU: 4, MemoryMiB: 8192, DiskGiB: 32, EngineVersion: "29.1.3"}
+}
+func DefaultLinuxBase() Base {
+	p := DefaultDockerEngine()
+	return Base{Name: "ubuntu-24.04-arm64", OS: "linux", OSVersion: "24.04", Image: p.Image, SSHUsername: p.SSHUsername, SSHPassword: p.SSHPassword, Capabilities: []string{"nix", "git", "node", "pnpm", "uv", "python"}}
 }

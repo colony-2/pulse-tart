@@ -22,7 +22,8 @@ nix --version
 export NIX_SSL_CERT_FILE=/etc/ssl/cert.pem
 export SSL_CERT_FILE=/etc/ssl/cert.pem
 target=$(cat "$bundle/profile")
-[[ $target == default || $target == integration ]]
+[[ $target == default || $target == integration || $target == docker || $target == docker-integration ]]
+/bin/bash "$bundle/resolve-c2j-vendor.sh" "$bundle"
 nix --extra-experimental-features 'nix-command flakes' build --no-write-lock-file --out-link /opt/pulse-tart "$bundle#$target"
 /opt/pulse-tart/bin/c2j version
 /opt/pulse-tart/bin/pulse-tart-guest version

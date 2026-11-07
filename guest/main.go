@@ -11,8 +11,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,8 +24,17 @@ import (
 
 const stateDir = "/var/db/pulse-tart"
 const workerUID = 55050
-const workerGID = 20
-const workerHome = "/Users/pulseworker"
+
+var workerGID uint32 = 20
+var workerHome = "/Users/pulseworker"
+
+func init() {
+	if runtime.GOOS == "linux" {
+		workerGID = 55050
+		workerHome = "/home/pulseworker"
+	}
+}
+
 const profile = "/opt/pulse-tart"
 
 type Process struct {
@@ -217,6 +228,17 @@ func execute(e Envelope, dir string, uid, gid uint32) (int, error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if os.Geteuid() == 0 {
 		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid}
+		if runtime.GOOS == "linux" {
+			if u, e := user.LookupId(strconv.FormatUint(uint64(uid), 10)); e == nil {
+				if groups, e := u.GroupIds(); e == nil {
+					for _, g := range groups {
+						if n, e := strconv.ParseUint(g, 10, 32); e == nil {
+							cmd.SysProcAttr.Credential.Groups = append(cmd.SysProcAttr.Credential.Groups, uint32(n))
+						}
+					}
+				}
+			}
+		}
 	}
 	if err = cmd.Start(); err != nil {
 		return -1, errors.New("worker start failed")
@@ -288,7 +310,9 @@ func serve() error {
 }
 func main() {
 	var err error
-	if len(os.Args) != 2 {
+	if len(os.Args) == 3 && os.Args[1] == "docker-relay" {
+		err = serveDockerRelay(os.Args[2])
+	} else if len(os.Args) != 2 {
 		err = invalid
 	} else {
 		switch os.Args[1] {

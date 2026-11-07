@@ -12,9 +12,11 @@ def token(value):
     return 'id-' + hashlib.sha256(value.encode()).hexdigest()[:20]
 
 
-def names(owner, base, group, cpu, memory, count):
+def names(owner, base, group, cpu, memory, count, docker_profile=""):
     prefix = f'pulse-{token(owner)}-{token(base)}'
-    return [prefix+'-base'] + [f'{prefix}-{token(group)}-{cpu}cpu-{memory}m-slot-{i:04d}' for i in range(1, count+1)]
+    base_prefix = f'pulse-{token(owner)}-{token(base+"-docker")}' if docker_profile else prefix
+    if docker_profile: group += '-docker-'+docker_profile
+    return [base_prefix+'-base'] + [f'{prefix}-{token(group)}-{cpu}cpu-{memory}m-slot-{i:04d}' for i in range(1, count+1)]
 
 
 def aliases(canonical, inventory):
@@ -28,4 +30,4 @@ if __name__ == '__main__':
     if sys.argv[1] == 'aliases':
         print('\n'.join(aliases(sys.argv[2], json.load(sys.stdin))))
     else:
-        print('\n'.join(names(*sys.argv[1:4], *(int(v) for v in sys.argv[4:7]))))
+        print('\n'.join(names(*sys.argv[1:4], *(int(v) for v in sys.argv[4:7]), docker_profile=sys.argv[7] if len(sys.argv)>7 else '')))

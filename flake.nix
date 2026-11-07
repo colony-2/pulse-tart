@@ -1,5 +1,5 @@
 {
-  description = "macOS execution environment for Pulse Orchard guests";
+  description = "Execution environments for Pulse Tart and Orchard guests";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf";
   # The preparer selects a release at runtime; Pulse does not pin c2j.
   inputs.c2j.url = "github:colony-2/c2j";
@@ -7,16 +7,17 @@
 
   outputs = { self, nixpkgs, c2j }:
     let
-      system = "aarch64-darwin";
+      forSystem = system: let
       pkgs = nixpkgs.legacyPackages.${system};
-      # Use the selected c2j commit's source filtering and vendor hash.
-      worker = c2j.packages.${system}.c2j;
+      # Preserve the selected c2j source; preparation resolves its dependency hash.
+      workerVendorHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+      worker = c2j.packages.${system}.c2j.overrideAttrs (_: { vendorHash = workerVendorHash; });
       runner = pkgs.buildGoModule {
         pname = "pulse-tart-guest";
         version = "0.1.0";
         src = ./guest;
-        postPatch = "cp go.mod.txt go.mod";
-        vendorHash = null;
+        postPatch = "cp go.mod.txt go.mod; cp go.sum.txt go.sum";
+        vendorHash = "sha256-A30hPGRobiMTkKA/bDtVNiz9bNFQ/iqy7FZqLpCtHNE=";
         env.CGO_ENABLED = "0";
         postInstall = ''mv $out/bin/guest $out/bin/pulse-tart-guest'';
       };
@@ -46,19 +47,29 @@
         '';
         doInstallCheck = false;
       });
+      dockerFixture = fixture.overrideAttrs (old: {
+        pname = "pulse-docker-fixture";
+        postPatch = ''
+          mkdir -p cmd/pulse-orchard-fixture
+          cp ${./tests/integration/docker-fixture.go.txt} cmd/pulse-orchard-fixture/main.go
+        '';
+        postInstall = "mv $out/bin/pulse-orchard-fixture $out/bin/pulse-docker-fixture";
+      });
     in {
-      packages.${system} = {
+        docker-integration = pkgs.buildEnv {name="pulse-docker-integration";paths=[ self.packages.${system}.docker dockerFixture ];pathsToLink=[ "/bin" "/etc/ssl/certs" ];};
+        worker-dependencies = worker.goModules;
         default = pkgs.buildEnv {
           name = "pulse-worker";
           paths = [ worker runner pkgs.git pkgs.nodejs pkgs.pnpm pkgs.uv pkgs.python3 pkgs.cacert ];
           pathsToLink = [ "/bin" "/etc/ssl/certs" ];
         };
+        docker = pkgs.buildEnv { name = "pulse-worker-docker"; paths = [ self.packages.${system}.default pkgs.docker-client pkgs.docker-buildx pkgs.docker-compose ]; pathsToLink = [ "/bin" "/etc/ssl/certs" ]; };
         guest = runner;
         integration = pkgs.buildEnv {
           name = "pulse-worker-integration";
           paths = [ self.packages.${system}.default fixture (pkgs.hiPrio fixtureRunner) ];
           pathsToLink = [ "/bin" "/etc/ssl/certs" ];
         };
-      };
     };
+    in { packages = nixpkgs.lib.genAttrs [ "aarch64-darwin" "aarch64-linux" ] forSystem; };
 }

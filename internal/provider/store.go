@@ -28,6 +28,7 @@ type Record struct {
 	Created     time.Time      `json:"created"`
 	Outcome     compute.Status `json:"outcome"`
 	Phase       string         `json:"phase"`
+	PairID      string         `json:"pair_id,omitempty"`
 	SlotID      string         `json:"slot_id,omitempty"`
 }
 type state struct {
@@ -36,6 +37,7 @@ type state struct {
 	Key     []byte                  `json:"key"`
 	Records map[string]*Record      `json:"records"`
 	Slots   map[string]*SlotRecord  `json:"slots,omitempty"`
+	Pairs   map[string]*PairRecord  `json:"pairs,omitempty"`
 	Images  map[string]*ImageRecord `json:"images,omitempty"`
 }
 type Store struct {
@@ -83,6 +85,21 @@ func OpenStore(dir, scope string) (*Store, error) {
 	}
 	for id, r := range s.data.Records {
 		if r == nil || r.LaunchID != id || r.Name == "" || r.Fingerprint == "" || r.NativeHash == "" || (r.Outcome != compute.Accepted && r.Outcome != compute.Unknown) || !validPhase(r.Phase) {
+			s.Close()
+			return nil, ErrState
+		}
+	}
+	if s.data.Pairs == nil {
+		s.data.Pairs = map[string]*PairRecord{}
+	}
+	for id, p := range s.data.Pairs {
+		if p == nil || p.ID != id || p.Primary.Name == "" || p.PrimaryHash == "" || p.SlotID == "" || !validPairPhase(p.Phase) {
+			s.Close()
+			return nil, ErrState
+		}
+	}
+	for _, r := range s.data.Records {
+		if r.PairID != "" && s.data.Pairs[r.PairID] == nil {
 			s.Close()
 			return nil, ErrState
 		}
@@ -158,6 +175,14 @@ func (s *Store) save() error {
 func validPhase(phase string) bool {
 	switch phase {
 	case "dispatch", "active", "deleting", "quarantine", "done":
+		return true
+	}
+	return false
+}
+
+func validPairPhase(s string) bool {
+	switch s {
+	case "reserved", "engine-dispatch", "primary-dispatch", "configuring", "ready", "handoff-intent", "running", "reclaiming", "quarantine", "gone":
 		return true
 	}
 	return false

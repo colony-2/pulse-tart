@@ -25,6 +25,7 @@ type ImageRecord struct {
 }
 
 type ImageStatus struct {
+	UID       string `json:"uid"`
 	Name      string `json:"name"`
 	Kind      string `json:"kind"`
 	Phase     string `json:"phase"`
@@ -40,7 +41,7 @@ func (p *Provider) Images() ([]ImageStatus, error) {
 	}
 	out := []ImageStatus{}
 	for _, r := range p.Store.data.Images {
-		out = append(out, ImageStatus{Name: r.Name, Kind: r.Kind, Phase: r.Phase, Worker: r.Worker, LocalName: r.LocalName})
+		out = append(out, ImageStatus{UID: r.UID, Name: r.Name, Kind: r.Kind, Phase: r.Phase, Worker: r.Worker, LocalName: r.LocalName})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
@@ -59,7 +60,11 @@ func (p *Provider) sourceSpec(b config.Base, cpu, memory int64) backend.Spec {
 		labels[k] = v
 	}
 	labels[config.WorkerNameLabel] = p.Config.Worker
-	return backend.Spec{OS: "darwin", Arch: "arm64", Runtime: "tart", Image: b.Image, CPU: cpu, Memory: memory, Headless: true, Username: b.SSHUsername, Password: string(b.SSHPassword), RestartPolicy: "Never", Suspendable: true, Labels: labels, Resources: map[string]int64{"org.cirruslabs.logical-cores": cpu, "org.cirruslabs.memory-mib": memory, "org.cirruslabs.tart-vms": 1}, StartupScript: backend.Script{Env: map[string]string{}}}
+	osname := b.OS
+	if osname == "" {
+		osname = "darwin"
+	}
+	return backend.Spec{OS: osname, Arch: "arm64", Runtime: "tart", Image: b.Image, CPU: cpu, Memory: memory, Headless: true, Username: b.SSHUsername, Password: string(b.SSHPassword), RestartPolicy: "Never", Suspendable: osname == "darwin", Labels: labels, Resources: map[string]int64{"org.cirruslabs.logical-cores": cpu, "org.cirruslabs.memory-mib": memory, "org.cirruslabs.tart-vms": 1}, StartupScript: backend.Script{Env: map[string]string{}}}
 }
 func (p *Provider) retain(ctx context.Context, name, uid string) error {
 	if b, ok := p.Backend.(interface {
@@ -106,7 +111,7 @@ func (p *Provider) reconcileImages(ctx context.Context) error {
 	for _, g := range p.Config.Slots {
 		if g.Count > 0 {
 			b := p.base(g.Base)
-			wanted[config.BaseImageName(p.Config.OwnerID, b.Name)] = b
+			wanted[p.baseImageName(b.Name)] = b
 		}
 	}
 	names := []string{}
@@ -174,7 +179,7 @@ func (p *Provider) reconcileImages(ctx context.Context) error {
 		}
 		spec := p.sourceSpec(base, config.DefaultCPU, config.DefaultMemoryMiB)
 		spec.Name = name
-		probe := p.probesSources() && r == nil
+		probe := p.probesSources() && r == nil && base.OS != "linux"
 		if r == nil {
 			existing, err := p.adopt(ctx, spec, base)
 			if err == nil {
@@ -205,6 +210,10 @@ func (p *Provider) reconcileImages(ctx context.Context) error {
 			}
 		}
 		spec.StartupScript.Content = baseStartup(setup, p.BaseScript, int(p.Config.BootstrapTimeout.Seconds()), base.OSVersion, probe)
+		if base.OS == "linux" {
+			spec.StartupScript.Content = strings.ReplaceAll(spec.StartupScript.Content, "/usr/bin/base64 -D", "/usr/bin/base64 -d")
+			spec.StartupScript.Content = strings.ReplaceAll(spec.StartupScript.Content, "prepare-base.sh", "prepare-base-linux.sh")
+		}
 		r = &ImageRecord{Name: name, Phase: "dispatch", Probe: probe, Kind: "base", NativeHash: p.Store.hash(spec), Worker: p.Config.Worker, Created: time.Now().UTC()}
 		p.Store.data.Images[name] = r
 		if err := p.Store.save(); err != nil {
@@ -230,6 +239,11 @@ func (p *Provider) PurgeImages(ctx context.Context) error {
 		return err
 	}
 	defer p.Store.mu.Unlock()
+	for _, pair := range p.Store.data.Pairs {
+		if pair.Phase != "gone" {
+			return fmt.Errorf("Docker allocations are still owned")
+		}
+	}
 	if p.Config.Capacity() != 0 || len(p.Store.data.Slots) != 0 {
 		return fmt.Errorf("drain slots before purging images")
 	}
@@ -256,4 +270,13 @@ func (p *Provider) PurgeImages(ctx context.Context) error {
 		delete(p.Store.data.Images, name)
 	}
 	return p.Store.save()
+}
+
+func (p *Provider) baseImageName(name string) string {
+	for _, g := range p.Config.Slots {
+		if g.Base == name && g.DockerProfile != "" {
+			return config.BaseImageName(p.Config.OwnerID, name+"-docker")
+		}
+	}
+	return config.BaseImageName(p.Config.OwnerID, name)
 }

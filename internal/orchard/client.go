@@ -33,6 +33,7 @@ type Client struct {
 	Base        string
 	HTTP        *http.Client
 	user, token string
+	GuestKeys   map[string][]byte
 }
 
 func New(c config.Orchard) (*Client, error) {

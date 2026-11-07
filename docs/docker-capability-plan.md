@@ -3,7 +3,9 @@
 Status: design selected; native suspended/concurrent prototype passed November 7, 2026;
 production qualification still has gates. Implements the
 [no-bind requirements](../pulse-tart-docker-capability-requirements.md).
-Production defaults remain unchanged. Qualification results below distinguish
+Integrated Orchard Linux and macOS jobs passed, including real JobDB, reopen and
+paired cleanup; see [library evidence](docker-library-results.json).
+The opt-in implementation is now in the main library; see [configuration and lifecycle](docker-library.md). Production defaults remain unchanged. Qualification results below distinguish
 live evidence, implementation decisions, and release gates.
 
 ## Selected contract
@@ -25,10 +27,10 @@ helper mount is allowed entirely inside the disposable engine VM.
 
 ## Source and evidence baseline
 
-- Audited upstream pulse-tart `939bb73348ae1d66049d20163f8edb908152d42e`.
+- Rebased onto upstream pulse-tart `56ab825` (including the audited `939bb73`).
   Configuration/bootstrap/launch remain macOS-specific and accept six probed
   tool capabilities. Reuse its image-update and durable handoff machinery;
-  experimental Docker code is not a production allocator.
+  the experimental adapter remains separate from the integrated paired allocator.
 - Existing Linux live jobs proved supplied leases, concrete base/capabilities,
   renewal, Docker API/builds and private-engine isolation. Older fixtures used
   binds and therefore do not establish the new acceptance contract.
@@ -62,29 +64,28 @@ helper mount is allowed entirely inside the disposable engine VM.
 
 ## Implementation structure
 
-Keep the shared provider API unchanged. Add an internal guest implementation
-interface for preparation, tool/OS probes, service launch, boot identity, process
-observation and shutdown. Supply Darwin/launchd and Linux/systemd implementations.
-Do not branch on OS repeatedly throughout reconciliation or put OS/arch into the
-shared allocation API. Audit macOS/suspend assumptions across provider/backend/guest code, including
-error and recovery paths.
+The shared provider API remains unchanged. `internal/provider/docker.go` owns
+paired admission and recovery. Guest setup scripts implement Darwin/launchd and
+Linux/systemd preparation; the launch builder supplies the primary's OS/home.
+The guest runner includes the qualified relay. `internal/orchard` and
+`internal/tart` implement management SSH and worker endpoint lifecycle; production
+code does not depend on `experimental/docker`.
 
-Extract the experimental relay/transport into production internal packages only
-after stream/network qualification. Replace the prepared-one-allocation harness
-with the real slot allocator; its constructor-time SSH probes, restricted Submit
-options and completion-only List behavior are not the production contract.
+The prototype remains available for focused SDK and concurrency qualification.
+The integrated test exercises the public library, real c2j/JobDB, reopen/replay,
+resource listing and paired cleanup.
 
 ### Library configuration
 
-Implement these additions to the library configuration:
+The implemented library configuration adds:
 
 - `Config.Docker`: optional Docker settings; nil preserves current behavior.
 - Named engine profiles: digest-pinned bootable Linux image, verified tool
   versions, CPU, memory, disk allowance and readiness timeout.
 - `SlotGroup.DockerProfile`: opt-in engine profile. On Linux this configures its
   own Engine; on macOS it reserves an additional companion.
-- Orchard connectivity: `WorkerEndpointAddress` reachable from guests and
-  `EndpointPortRange`, with required endpoint support. Keep these outside common execution
+- Orchard connectivity: `DockerEndpoint.Address` reachable from guests and
+  `DockerEndpoint.PortMin`/`PortMax`, with required endpoint support. Keep these outside common execution
   settings. Local Tart has equivalent host-service/network options.
 
 Validate image/profile references, positive resource quantities, guest support,
@@ -124,7 +125,7 @@ Prepare software in background reconciliation. Maintain ready capacity before
 claim/handoff; do not queue live leases behind apt installs or image downloads.
 Admission must require both native reservations and a verified usable endpoint
 before c2j starts. A warming profile remains advertised but returns NoCapacity
-or Unavailable as appropriate. Check `StartBefore` again before durable handoff.
+or Unavailable as appropriate. Positive timeout, `StartBefore` and scratch requests remain explicitly unsupported.
 
 ### Transport and TCP services
 
@@ -145,9 +146,10 @@ checks. Persist the assigned endpoint port and request that exact port before
 handoff, so worker endpoint recreation does not silently move a running pair.
 On collision, report unavailable and reconcile; do not change a guest's endpoint
 behind an active stream. Include endpoint deletion/recreation in fault tests.
-No controller credentials enter either guest. Production bootstrap uses trusted
-management transport; the lab harness's password login/unpinned management SSH
-is not its production authentication design.
+No controller credentials enter either guest. Management SSH uses the configured image account; optional host-key pins follow
+source ancestry. Without a pin it retains the existing managed-endpoint trust
+model. Allocation-to-engine SSH always requires the fresh allocation key and
+pinned engine host key.
 
 Selected local Tart transport: the equivalent worker-local TCP bridge to the
 engine's dedicated SSH port, reachable at the Mac host's guest-facing address.

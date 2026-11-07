@@ -119,4 +119,12 @@ class UpdateImages(unittest.TestCase):
         inventory=[{'Name':self.orchard},{'Name':'old-job'},{'Name':self.orchard+'-extra'},{'Name':self.orchard.replace('pulse-test-','pulse-other-')}]
         self.assertEqual(names.aliases(self.sources[1],inventory),[self.sources[1],self.orchard])
 
+
+class DockerImageNames(unittest.TestCase):
+    def test_docker_images_are_separate_and_version_independent(self):
+        actual=names.names('mac-pool','macos-26-arm64','standard',4,8192,2,'engine')
+        self.assertEqual(actual[0],'pulse-mac-pool-macos-26-arm64-docker-base')
+        self.assertEqual(actual[1],'pulse-mac-pool-macos-26-arm64-standard-docker-engine-4cpu-8192m-slot-0001')
+        self.assertEqual(len(set(actual)),3)
+
 if __name__=='__main__': unittest.main()

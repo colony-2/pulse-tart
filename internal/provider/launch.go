@@ -122,11 +122,11 @@ type envelope struct {
 }
 
 func workerProcess(l compute.Launch, b config.Base, cpu, memory int64) process {
-	args := []string{"run", "with-lease", "--jobdb", l.Job.JobDB, "--job-id", l.Job.JobID, "--lease-file", "-", "--ci", "--input-mode", "fail", "--execution-base", b.Name, "--execution-cpu", strconv.FormatInt(cpu*1000, 10) + "m", "--execution-memory", strconv.FormatInt(memory, 10) + "Mi", "--execution-platform", "darwin/arm64", "--execution-image", b.Image, "--execution-image-digest", strings.Split(b.Image, "@")[1]}
+	args := []string{"run", "with-lease", "--jobdb", l.Job.JobDB, "--job-id", l.Job.JobID, "--lease-file", "-", "--ci", "--input-mode", "fail", "--execution-base", b.Name, "--execution-cpu", strconv.FormatInt(cpu*1000, 10) + "m", "--execution-memory", strconv.FormatInt(memory, 10) + "Mi", "--execution-platform", executionPlatform(b), "--execution-image", b.Image, "--execution-image-digest", strings.Split(b.Image, "@")[1]}
 	for _, cap := range b.Capabilities {
 		args = append(args, "--execution-capability", cap)
 	}
-	return process{Command: []string{"/opt/pulse-tart/bin/c2j"}, Args: args, Env: map[string]string{"PULSE_LAUNCH_ID": l.LaunchID, "PULSE_BASE": b.Name, "PULSE_JOBDB_INSTANCE_ID": l.Job.InstanceID, "PULSE_TENANT_ID": l.Job.TenantID}, WorkingDir: "/Users/pulseworker", StdinBytes: []byte(l.Lease)}
+	return process{Command: []string{"/opt/pulse-tart/bin/c2j"}, Args: args, Env: map[string]string{"PULSE_LAUNCH_ID": l.LaunchID, "PULSE_BASE": b.Name, "PULSE_JOBDB_INSTANCE_ID": l.Job.InstanceID, "PULSE_TENANT_ID": l.Job.TenantID}, WorkingDir: workerHome(b), StdinBytes: []byte(l.Lease)}
 }
 
 // JSON replaces invalid UTF-8 in strings. Hash the opaque credential as bytes
@@ -138,4 +138,17 @@ func (p *Provider) launchHash(l compute.Launch) string {
 		Launch compute.Launch
 		Lease  []byte
 	}{l, lease})
+}
+
+func executionPlatform(b config.Base) string {
+	if b.OS == "linux" {
+		return "linux/arm64"
+	}
+	return "darwin/arm64"
+}
+func workerHome(b config.Base) string {
+	if b.OS == "linux" {
+		return "/home/pulseworker"
+	}
+	return "/Users/pulseworker"
 }

@@ -244,6 +244,10 @@ func (r *liveReport) capture(t *testing.T, ctx context.Context, kind string, con
 		Records map[string]struct{ Name, UID string } `json:"records"`
 		Slots   map[string]struct{ Name, UID string } `json:"slots"`
 		Images  map[string]struct{ Name, UID string } `json:"images"`
+		Pairs   map[string]struct {
+			Primary, Engine       struct{ Name string }
+			PrimaryUID, EngineUID string
+		} `json:"pairs"`
 	}
 	data, _ := os.ReadFile(filepath.Join(stateDir, "state.json"))
 	_ = json.Unmarshal(data, &journal)
@@ -256,6 +260,14 @@ func (r *liveReport) capture(t *testing.T, ctx context.Context, kind string, con
 	}
 	for _, v := range journal.Images {
 		owned[v.Name] = v.UID
+	}
+	for _, pair := range journal.Pairs {
+		if pair.PrimaryUID != "" {
+			owned[pair.Primary.Name] = pair.PrimaryUID
+		}
+		if pair.EngineUID != "" {
+			owned[pair.Engine.Name] = pair.EngineUID
+		}
 	}
 	for n, uid := range r.extra {
 		owned[n] = uid
@@ -305,7 +317,7 @@ func (r *liveReport) capture(t *testing.T, ctx context.Context, kind string, con
 			}
 		}
 		if !v.Stopped() {
-			logs, e := testGuestExec(ctx, kind, connection, v, `for f in /var/log/pulse-tart-template.log /var/log/pulse-tart-bootstrap.log /var/log/pulse-tart-guest.log /var/log/pulse-fixture.log /var/db/pulse-tart/worker.log; do if sudo -n test -f "$f"; then printf '\n%s\n' "$f"; sudo -n tail -c 16000 "$f"; fi; done`)
+			logs, e := testGuestExec(ctx, kind, connection, v, `for f in /var/log/pulse-tart-build.log /var/log/pulse-tart-base.log /var/log/pulse-tart-docker.log /var/tmp/pulse-docker-contract.log /var/log/pulse-tart-template.log /var/log/pulse-tart-bootstrap.log /var/log/pulse-tart-guest.log /var/log/pulse-fixture.log /var/db/pulse-tart/worker.log; do if sudo -n test -f "$f"; then printf '\n%s\n' "$f"; sudo -n tail -c 16000 "$f"; fi; done`)
 			if e == nil {
 				d.GuestLogs = string(logs)
 			} else {

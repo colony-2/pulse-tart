@@ -113,6 +113,11 @@ func New(c config.Tart, common config.Config) (*Client, error) {
 }
 func open(c config.Tart, common config.Config) (*Client, error) {
 	ctx, cancel := context.WithCancel(context.Background())
+	if common.Docker != nil {
+		for _, p := range common.Docker.Profiles {
+			common.Bases = append(append([]config.Base{}, common.Bases...), config.Base{Image: p.Image, SSHHostKey: p.SSHHostKey})
+		}
+	}
 	b := &Client{cfg: c, dir: filepath.Join(common.StateDir, "native"), bases: common.Bases, timeout: common.BootstrapTimeout, records: map[string]*record{}, workers: map[string]bool{}, ctx: ctx, cancel: cancel}
 	fail := func() (*Client, error) { cancel(); return nil, Err }
 	if os.MkdirAll(b.dir, 0700) != nil {
@@ -462,12 +467,16 @@ func (b *Client) start(name string) (int, error) {
 	if e != nil {
 		return 0, Err
 	}
-	cmd := exec.Command("/bin/sh", "-c", `"$1" run --no-graphics --suspendable "$2"
+	suspendable := true
+	if r := b.records[name]; r != nil {
+		suspendable = r.Spec.OS != "linux"
+	}
+	cmd := exec.Command("/bin/sh", "-c", `if [ "$4" = true ]; then "$1" run --no-graphics --suspendable "$2"; else "$1" run --no-graphics "$2"; fi
 code=$?
 umask 077
 printf '%s\n' "$code" > "$3.tmp"
 mv "$3.tmp" "$3"
-`, "pulse-tart-run", b.cfg.Binary, name, filepath.Join(b.dir, name+".exit"))
+`, "pulse-tart-run", b.cfg.Binary, name, filepath.Join(b.dir, name+".exit"), strconv.FormatBool(suspendable))
 	cmd.Env = b.env()
 	cmd.Stdout = f
 	cmd.Stderr = f

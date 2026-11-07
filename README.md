@@ -1,6 +1,6 @@
 # pulse-tart
 
-A Go library implementing [`pulse-provider-api`](https://github.com/colony-2/pulse-provider-api) for macOS ARM64 jobs through local Tart or Orchard. Pulse imports it and supplies complete job assignments. Configuration is a Go API; there is no provider CLI, plugin protocol, or configuration file.
+A Go library implementing [`pulse-provider-api`](https://github.com/colony-2/pulse-provider-api) for ARM64 jobs through local Tart or Orchard. Ordinary slots run macOS; opt-in Docker slots support macOS with a private Linux companion or Linux directly. Pulse imports it and supplies complete job assignments. Configuration is a Go API; there is no provider CLI, plugin protocol, or configuration file.
 
 ## Images and jobs
 
@@ -80,9 +80,27 @@ The library starts `c2j run with-lease --lease-file -`, passing the opaque lease
 
 Keep the durable journal for the owner scope's lifetime and reopen it with the same backend and owner. One runtime owns each state directory; use a distinct owner for each independent pool. Lost create responses retain reservations and are never blindly retried. Failed preparation remains inspectable through `Images()`/`Slots()` and backend events. Drain and purge known stopped sources before rebuilding a failed base. Identity mismatches are quarantined; never discard state to retry an uncertain launch.
 
-The updater may replace published source images. Job clones retain strict ownership checks and must not be modified externally. Never run a suspended source directly. VM age alone does not authorize cleanup of a zero-timeout worker. Linux guests, positive runtime caps, start-before constraints, scratch reservations and shared host Nix volumes remain unsupported. Guest-local Nix stores benefit from Tart/APFS disk cloning without sharing a writable store.
+The updater may replace published source images. Job clones retain strict ownership checks and must not be modified externally. Never run a suspended source directly. VM age alone does not authorize cleanup of a zero-timeout worker. Linux guests are available only through the opt-in Docker configuration below. Positive runtime caps, start-before constraints, scratch reservations and shared host Nix volumes remain unsupported. Guest-local Nix stores benefit from Tart/APFS disk cloning without sharing a writable store.
 
 Orchard requires configuration-preserving suspended clones and power-state updates. Use verified HTTPS and Basic auth; `CACert` accepts a custom CA and `AllowInsecureHTTP` enables lab HTTP. Guests require SSH and passwordless sudo. Direct Tart optionally pins `Base.SSHHostKey`; otherwise it trusts the managed guest endpoint. Protect the state directory and controller access: native delivery records contain leases even though public listings and fingerprint journals do not.
+
+## Docker capability
+
+Docker is enabled per slot group using `Config.Docker` and
+`SlotGroup.DockerProfile`. The library prepares and verifies unused capacity
+before accepting a lease: one Linux VM for Linux jobs, or a fresh macOS clone
+plus a private Linux Engine. It tracks both native identities through handoff,
+reopen and teardown. `DockerAllocations()` exposes operational status.
+
+The native workspace stays private. Build contexts, copies, engine-owned volumes,
+TCP publications and the tested Compose/SDK subset work without shared mounts.
+Runtime job-file binds and file-backed Compose secrets/configs are unsupported.
+
+See [Docker library configuration and lifecycle](docs/docker-library.md) for the
+config API, worker endpoint requirements, companion sizing, standalone image
+updates and the dedicated `scripts/test-macos-docker-library.sh` test command.
+Docker remains opt-in; native integrated concurrency and real fault/pressure
+qualification are release gates, separate from the passed prototype matrix.
 
 ## Test and debug
 

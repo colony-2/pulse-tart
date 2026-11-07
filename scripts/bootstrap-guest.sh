@@ -3,11 +3,27 @@
 set -euo pipefail
 set +x
 umask 077
-[[ $(uname -s) == Darwin && $(uname -m) == arm64 && $EUID == 0 ]]
+[[ $EUID == 0 ]]
 mkdir -p /var/db/pulse-tart
 chmod 700 /var/db/pulse-tart
 [[ ! -f /var/db/pulse-tart/intent ]] || exit 0
 [[ -x /opt/pulse-tart/bin/pulse-tart-guest && -x /opt/pulse-tart/bin/c2j ]]
+if [[ $(uname -s) == Linux ]]; then
+cat > /etc/systemd/system/pulse-tart-guest.service <<'UNIT'
+[Unit]
+After=network-online.target
+[Service]
+ExecStart=/opt/pulse-tart/bin/pulse-tart-guest serve
+Restart=on-failure
+RestartSec=1
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now pulse-tart-guest.service
+echo PULSE_BOOTSTRAP_OK
+exit 0
+fi
 cat > /Library/LaunchDaemons/dev.pulse-tart.guest.plist <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
