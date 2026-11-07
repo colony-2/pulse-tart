@@ -39,6 +39,10 @@ status=0
 # Include script/prototype regressions in the frozen snapshot as well.
 if ! python3 -m unittest discover -s scripts -p 'test_*test.py' > "$out/python.log" 2>&1; then status=2; fi
 if ! python3 -m unittest discover -s scripts/docker-prototype -p 'test*.py' >> "$out/python.log" 2>&1; then status=2; fi
+if [[ $status != 0 ]]; then
+ printf 'Python regression tests failed before VM provisioning; log: %s/python.log\n' "$relative" >&2
+ tail -n 80 "$out/python.log" >&2
+fi
 # Catch worker launchd/Python/port failures without preparing any VMs.
 if [[ $status == 0 && $backend == tart && $platform != linux ]]; then
  printf 'Checking the native worker endpoint (no VMs; up to 90 seconds).\n'
