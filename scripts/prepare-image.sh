@@ -5,9 +5,11 @@ set +x
 umask 077
 usage() {
   cat <<'HELP'
-Usage: sudo /bin/bash prepare-image.sh [--shutdown] [EXTRACTED_BUNDLE_DIR]
+Usage: sudo /bin/bash prepare-image.sh [--shutdown] [--c2j latest|TAG|COMMIT] [EXTRACTED_BUNDLE_DIR]
 
-Install the pinned Nix/c2j/tool environment inside a fresh macOS ARM64 VM.
+Install the bundle's Nix/c2j/tool environment inside a fresh macOS ARM64 VM.
+build-bundle.sh selects the latest c2j release by default. Use --c2j to override
+its selection here, including --c2j latest to refresh an older bundle.
 The directory defaults to this script's directory in the extracted guest bundle.
 No worker service is started and no lease is accepted. Re-running on the same
 unused builder is safe. --shutdown powers off after successful preparation.
@@ -16,20 +18,23 @@ HELP
 }
 shutdown=0
 bundle=
-for arg in "$@"; do
-  case "$arg" in
+version=bundled
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     --help|-h) usage; exit 0 ;;
     --shutdown) shutdown=1 ;;
-    --*) echo "Unknown option: $arg" >&2; exit 2 ;;
-    *) if [[ -n $bundle ]]; then usage >&2; exit 2; fi; bundle=$arg ;;
+    --c2j) [[ $# -ge 2 ]] || { usage >&2; exit 2; }; version=$2; shift ;;
+    --*) echo "Unknown option: $1" >&2; exit 2 ;;
+    *) if [[ -n $bundle ]]; then usage >&2; exit 2; fi; bundle=$1 ;;
   esac
+  shift
 done
 bundle=${bundle:-$(cd "$(dirname "$0")" && pwd)}
 if [[ $(uname -s) != Darwin || $(uname -m) != arm64 || $EUID != 0 ]]; then
   echo 'Run as root inside a fresh macOS ARM64 builder VM.' >&2
   exit 1
 fi
-for file in install-guest.sh flake.nix flake.lock profile environment.sha256; do
+for file in install-guest.sh select-c2j.sh flake.nix flake.lock profile; do
   [[ -f "$bundle/$file" ]] || { echo "Missing bundle file: $file" >&2; exit 1; }
 done
 profile=$(cat "$bundle/profile")
@@ -54,21 +59,17 @@ if [[ -d /var/db/pulse-tart ]]; then
   done
   shopt -u nullglob dotglob
 fi
+if [[ $version != bundled ]]; then /bin/bash "$bundle/select-c2j.sh" "$bundle" "$version"; fi
 /bin/bash "$bundle/install-guest.sh" "$bundle"
-# Record the environment identity separately from per-launch state. The profile
-# symlink remains a Nix GC root; keep the store, daemon and worker account.
-manifest=/opt/pulse-tart-image
-mkdir -p "$manifest"
-chmod 755 "$manifest"
-readlink /opt/pulse-tart > "$manifest/store-path.tmp"
-cp "$bundle/environment.sha256" "$manifest/environment.sha256.tmp"
-chmod 644 "$manifest/"*.tmp
-mv "$manifest/store-path.tmp" "$manifest/store-path"
-mv "$manifest/environment.sha256.tmp" "$manifest/environment.sha256"
+# Keep only executable setup entry points in the prepared image. c2j version
+# reports the installed release; no version/fingerprint sidecar is needed.
+mkdir -p /opt/pulse-tart-image
+cp "$bundle/bootstrap-guest.sh" "$bundle/prepare-template.sh" /opt/pulse-tart-image/
+chmod 755 /opt/pulse-tart-image /opt/pulse-tart-image/*.sh
 rm -f /var/db/pulse-tart/nix-installer
 rmdir /var/db/pulse-tart
 sync
 echo PULSE_IMAGE_PREPARED
-echo "Environment: $(cat "$manifest/environment.sha256")"
+/opt/pulse-tart/bin/c2j version
 echo 'Power off cleanly, then export this VM as your base image.'
 if [[ $shutdown == 1 ]]; then /sbin/shutdown -h now; fi

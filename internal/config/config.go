@@ -27,13 +27,13 @@ func (Secret) String() string   { return "[REDACTED]" }
 func (Secret) GoString() string { return "[REDACTED]" }
 
 // Config is identical for Orchard and direct Tart. Paths are absolute; the host
-// owns configuration loading. A nil GuestBundle selects the embedded bundle.
+// owns configuration loading. C2JVersion is used only to prepare missing images.
 type Config struct {
 	OwnerID          string
 	StateDir         string
 	Bases            []Base // Most preferred first; discovery preserves this order.
 	Slots            []SlotGroup
-	GuestBundle      []byte
+	C2JVersion       string // Defaults to latest published release; existing images are reused.
 	PollInterval     time.Duration
 	BootstrapTimeout time.Duration
 }
@@ -120,7 +120,12 @@ func Normalize(c Config) (Config, error) {
 		return Config{}, Err
 	}
 	c.StateDir = filepath.Clean(c.StateDir)
-	c.GuestBundle = slices.Clone(c.GuestBundle)
+	if c.C2JVersion == "" {
+		c.C2JVersion = "latest"
+	}
+	if len(c.C2JVersion) > 200 || !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*$`).MatchString(c.C2JVersion) {
+		return Config{}, Err
+	}
 	c.Bases = slices.Clone(c.Bases)
 	c.Slots = slices.Clone(c.Slots)
 	if c.PollInterval == 0 {

@@ -1,14 +1,15 @@
 {
-  description = "Pinned macOS execution environment for Pulse Orchard guests";
+  description = "macOS execution environment for Pulse Orchard guests";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf";
-  inputs.c2j.url = "github:colony-2/c2j/d6553a24682773c4f5d7777edf93af657ffad453";
+  # The preparer selects a release at runtime; Pulse does not pin c2j.
+  inputs.c2j.url = "github:colony-2/c2j";
   inputs.c2j.inputs.nixpkgs.follows = "nixpkgs";
 
   outputs = { self, nixpkgs, c2j }:
     let
       system = "aarch64-darwin";
       pkgs = nixpkgs.legacyPackages.${system};
-      # Upstream's filtered source and vendor hash are pinned by flake.lock.
+      # Use the selected c2j commit's source filtering and vendor hash.
       worker = c2j.packages.${system}.c2j;
       runner = pkgs.buildGoModule {
         pname = "pulse-tart-guest";

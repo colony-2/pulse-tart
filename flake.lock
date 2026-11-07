@@ -18,29 +18,7 @@
     },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs",
-        "c2j": "c2j"
-      }
-    },
-    "c2j": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1793844684,
-        "narHash": "sha256-jusWwJ64+ZSUp+QXtTiCoBQ8memApef08oDw9zsRY9k=",
-        "owner": "colony-2",
-        "repo": "c2j",
-        "rev": "d6553a24682773c4f5d7777edf93af657ffad453",
-        "type": "github"
-      },
-      "original": {
-        "owner": "colony-2",
-        "repo": "c2j",
-        "rev": "d6553a24682773c4f5d7777edf93af657ffad453",
-        "type": "github"
+        "nixpkgs": "nixpkgs"
       }
     }
   },

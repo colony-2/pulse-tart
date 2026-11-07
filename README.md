@@ -1,95 +1,107 @@
 # pulse-tart
 
-A Go library implementing [`pulse-provider-api`](https://github.com/colony-2/pulse-provider-api) for macOS ARM64 jobs through Orchard or local Tart. Pulse imports the library and supplies complete job assignments. There is no provider executable, plugin protocol, configuration file, or background service to install.
+A Go library implementing [`pulse-provider-api`](https://github.com/colony-2/pulse-provider-api) for macOS ARM64 jobs through local Tart or Orchard. Pulse imports it and supplies complete job assignments. Configuration is a Go API; there is no provider CLI, plugin protocol, or configuration file.
 
-Both backends share `Config`: base environments, slot counts/sizes, state, and bootstrap settings. `OrchardConfig` adds controller connectivity and worker placement; `TartConfig` selects the local Tart executable/home and connection timeouts.
+## Images and jobs
+
+The provider prepares missing images automatically when you run reconciliation:
+
+1. Clone the configured macOS image, install Nix, c2j and the worker tools, then shut it down. This becomes the shared **prepared base**.
+2. Cold-boot a separate clone for each concurrency slot, with its own MAC and configured CPU/memory, then suspend it. These are the **slot templates**.
+3. For each job, clone and resume an unused slot template and start its installed c2j. Delete the job clone after it shuts down. The original template never receives a lease or runs a job.
+
+Installation happens during image preparation, not job startup. c2j is built from source inside the guest using Nix. The small setup archive transferred by the library contains scripts and build definitions, not a c2j binary or VM image; callers do not manage it.
+
+Image names are stable and contain **no c2j version**. Existing images are reused across library restarts and upgrades. `C2JVersion` defaults to `"latest"` and is resolved only when a missing base needs installation. Changing this setting does not update existing images. There is no release manifest or installed-version metadata file; run `/opt/pulse-tart/bin/c2j version` inside a clone to inspect its version.
+
+## Use the library
 
 ```go
-import (
-    "context"
-    api "github.com/colony-2/pulse-provider-api"
-    tart "github.com/colony-2/pulse-tart"
-)
-
 cfg := tart.Config{
-    OwnerID: "pulse-macos",
+    OwnerID: "mac-pool",
     StateDir: "/var/lib/pulse/macos", // private, durable, absolute path
-    Bases: tart.DefaultBases(), // Tahoe 26 first, then Sequoia 15; pinned images
+    Bases: tart.DefaultBases(),
+    C2JVersion: "latest", // optional; also accepts a release tag or commit
     Slots: []tart.SlotGroup{
-        {Name: "tahoe", Count: 1, Base: "macos-26-arm64"},
-        {Name: "sequoia", Count: 1, Base: "macos-15-arm64"},
+        {Name: "standard", Count: 2, Base: "macos-26-arm64",
+         CPU: 4, MemoryMiB: 8192},
     },
 }
-runtime, err := tart.NewOrchard(cfg, tart.OrchardConfig{
-    URL: "https://orchard.example.test", Worker: "mac-worker",
-    Username: "pulse", Token: tart.Secret(controllerToken),
-})
-// Or, on an Apple Silicon Mac with Tart installed:
-// runtime, err := tart.NewTart(cfg, tart.TartConfig{})
+runtime, err := tart.NewTart(cfg, tart.TartConfig{})
+// Or use the same cfg with Orchard:
+// runtime, err := tart.NewOrchard(cfg, tart.OrchardConfig{
+//     URL: "https://orchard.example.test", Worker: "mac-worker",
+//     Username: "pulse", Token: tart.Secret(controllerToken),
+// })
 if err != nil { return err }
 defer runtime.Close()
-var provider api.Provider = runtime
-catalog, err := provider.GetCapabilities(context.Background())
-if err != nil { return err }
-_ = catalog // Complete configured bases, most preferred first.
-// The host owns this loop and its error/retry policy.
-return runtime.Run(context.Background())
+// Pass runtime to Pulse as api.Provider. The host also drives reconciliation:
+return runtime.Run(ctx)
 ```
 
-Constructors validate and copy configuration, lock the journal, and create no VMs. Call `Run(ctx)` or periodically call `Reconcile(ctx)` to prepare slots and clean up completed work. `Run` returns on cancellation or the first reconciliation error. `Check` checks connectivity; `Slots` reports preparation and occupancy. `GetCapabilities`, `Submit`, and `List` support concurrent calls; discovery and listing are strictly observational.
+Import `tart "github.com/colony-2/pulse-tart"`. Constructors validate/copy configuration and lock the journal; they create no VMs. Drive `Run(ctx)` or call `Reconcile(ctx)` periodically. `Run` returns on cancellation or a reconciliation error; the application owns its retry policy. `Slots()` reports preparation and occupancy; `Images()` reports known prepared sources.
 
-Each slot owns an independently booted, uniquely named suspended template with a unique MAC. A job gets a fresh clone of that snapshot; only one unresolved or active job may use a slot. The original template never receives a lease. CPU/memory stay fixed during restore. Busy or warming slots return `no_capacity`; there is no internal lease queue. Counts must fit the physical host's VM and resource limits.
+Defaults are **4 vCPU and 8 GiB per slot**. Zero CPU/memory selects those defaults; zero count drains the group. Only one active or unresolved job uses a slot. Busy or warming slots return `no_capacity`, with no internal lease queue. Counts must fit the host's VM/resource limits; image preparation also needs a free VM position.
 
-**Defaults: 4 vCPU and 8 GiB per slot.** Zero CPU/memory selects those defaults. A zero count drains a group. Use separate groups for larger jobs. The built-in catalog uses `macos-26-arm64` and `macos-15-arm64`; each entry pins an image digest and its verified exact guest version. Selectors match concrete names case-sensitively; each `*` anywhere matches zero or more characters, including `/` (for example, `macos-*arm64`). Other characters are literal. Aliases are no longer supported; replace old selectors such as `macos` with `macos*`. All requested capabilities must match, and configured capabilities are probed before a template becomes ready.
+`DefaultBases()` supplies these digest-pinned, general-purpose images, without Xcode. It enables no slots automatically. The default SSH login is `admin`/`admin`; override credentials with a private image.
 
-`DefaultBases()` supplies independent configuration values for these public Cirrus Labs images. It does not enable slots automatically. Both images use the public `admin`/`admin` SSH login; override image and credentials when using a private image. Bootstrap installs the pinned Nix/c2j tool environment. These are general-purpose images without Xcode.
-
-| Base | Pinned guest OS | Use |
+| Concrete base | Verified guest OS | Preference |
 | --- | --- | --- |
-| `macos-26-arm64` | Tahoe 26.6.2 | Preferred environment |
-| `macos-15-arm64` | Sequoia 15.7.7 | Compatibility testing |
+| `macos-26-arm64` | Tahoe 26.6.2 | First |
+| `macos-15-arm64` | Sequoia 15.7.7 | Second |
 
-Existing explicitly configured base names remain valid. To use both versions, assign slots to both as above; for two Tahoe slots, set its count to two and omit the Sequoia group. `macos-26*` selects Tahoe and `macos-15*` selects Sequoia. Broad selectors such as `macos*` may use either according to preference and availability.
+`GetCapabilities` advertises all configured bases in order, independent of current capacity. Selectors such as `macos-26*` or `macos-*arm64` match concrete names; `*` matches any sequence, other characters are literal, and matching is case-sensitive. All requested capabilities must match. Admission chooses the first configured base with a fitting available slot, then the smallest fitting slot. Add a separate slot group to enable another OS or size.
 
-`GetCapabilities(ctx)` returns `BasesComplete: true` and all `Config.Bases` in configuration order, with complete capability sets and no credentials. Busy, warming, or disabled slots do not change that catalog. Results are independent copies; discovery performs no backend calls or reconciliation. For broad selectors, admission prefers the first configured base that can satisfy the request with an available slot, then the smallest fitting slot within that base. Discovery is a support hint, not a capacity reservation.
+## Update images independently of Pulse
 
-The library constructs `c2j run with-lease --lease-file -`, passing the opaque lease unchanged through stdin. It never accepts arbitrary commands or job secrets. c2j retrieves secrets through the lease. The pinned c2j receives the actual slot CPU/memory, platform, OCI image/digest, and verified capabilities; the selected concrete base is passed as `--execution-base` for c2j’s allocation checks. `PULSE_BASE` remains available as diagnostic context. The guest bundle pins c2j with JobDB v2 lease support; upgrading the bundle changes its environment fingerprint so unused templates are rebuilt with the compatible worker.
+On the Apple Silicon worker, run this from a pulse-tart checkout as the same user, with the same `TART_HOME` (the library's `TartConfig.Home`), used by Tart or the Orchard worker:
 
-Acceptance means Orchard accepted creation or local Tart's detached run was dispatched. It does not guarantee VM boot, guest delivery, or job success. Pulse handles failed deployments. Positive runtime caps, start-before constraints, scratch reservations, Linux guests, and shared host Nix volumes are unsupported. Nix and tools are preinstalled in each template; APFS clones reuse the prepared disk efficiently without sharing a writable Nix store.
+```sh
+./scripts/update-macos-images.sh \
+  --owner mac-pool --base macos-26-arm64 --group standard \
+  --slots 2 --cpu 4 --memory 8192
 
-`Close` releases library resources and leaves native VMs running. Reopen the same backend, owner and state directory after a host restart. Changed configuration drains affected templates; `Drain(ctx)` disables admissions and retires templates as existing jobs finish. Continue reconciling until `Slots()` is empty. Failed template builds remain for inspection; drain/re-enable a group to retry. Unknown dispatches retain reservations and are never blindly retried.
+# Select a release/commit instead of the latest published c2j release:
+# Add: --c2j <tag-or-commit>
+# To prepare only missing images, add: --ensure
+```
 
-Keep the journal and its completed-launch records for the lifetime of the owner scope. One runtime owns a state directory, and one host must own each backend/owner scope. Never discard state to retry an uncertain launch. Journal version 3 rejects legacy plugin journals; drain the old provider before moving to a new owner/state directory. Identity mismatches are quarantined. Other tools must not modify provider-owned VM names or hardware.
+Match the owner, base, group, count and size to the library configuration. The script prepares a fresh base and all requested suspended slots, then replaces the published sources under their existing names. **Already-created job clones keep their old environment; clones created after replacement use the new one.** Each replacement slot gets a fresh MAC. No Pulse release, RPC, or library restart is needed.
 
-Orchard uses REST and requires the suspended-clone behavior validated after the lab upgrade. The controller and selected worker must support suspendable VMs and power-state updates. Production connections use verified HTTPS and Basic auth; custom CA PEM is passed through `CACert`. `AllowInsecureHTTP` is an explicit lab option. Guest images require SSH and passwordless sudo. Direct Tart uses SSH password authentication; `Base.SSHHostKey` optionally pins the guest server public key. Without a pin it trusts the managed guest's SSH endpoint, as Orchard's guest delivery does.
+Publication uses Tart's `clone --overwrite` lock, which serializes replacement with cloning. Each source is published separately: failure during preparation leaves existing sources unchanged; failure during publication can leave a mix of old and new sources. Rerun the command to finish updating. Reserve one free VM position while the script builds images; it does not pause admissions for you.
 
-Lease-bearing delivery data exists in Orchard's private VM startup specification or the direct backend's private native journal. The public fingerprint journal and listings contain no lease. Protect controller access and the state directory. JobRef and LaunchID are preserved in the journal and native startup metadata; Orchard worker labels remain placement selectors.
+The script also recognizes Orchard's worker-local aliases and replaces them alongside the canonical names. Run it **on that worker**; remote Orchard fleet updates are deferred. Requirements, naming, logs and custom-image options are in [image preparation](docs/prepared-images.md).
 
-Build and run deterministic checks with `make test vet build`. For the complete test suite, including real VM and JobDB execution, use:
+## Execution and recovery
+
+The library starts `c2j run with-lease --lease-file -`, passing the opaque lease through stdin and the concrete base as `--execution-base`. c2j retrieves secrets using the lease. The provider receives no job secrets. Acceptance means Orchard accepted creation or local Tart dispatched the detached run; Pulse handles subsequent boot or deployment failures.
+
+`Close` leaves VMs and images intact. `Drain(ctx)` disables admissions and retires slot reservations as jobs finish; continue reconciling until `Slots()` is empty. Prepared images remain reusable. For explicit removal, call `PurgeImages(ctx)` after draining and completing all jobs. It removes only sources recorded by that runtime, not other worker images or unregistered aliases.
+
+Keep the durable journal for the owner scope's lifetime and reopen it with the same backend and owner. One runtime owns each state directory; use a distinct owner for each independent pool. Lost create responses retain reservations and are never blindly retried. Failed preparation remains inspectable through `Images()`/`Slots()` and backend events. Drain and purge known stopped sources before rebuilding a failed base. Identity mismatches are quarantined; never discard state to retry an uncertain launch.
+
+The updater may replace published source images. Job clones retain strict ownership checks and must not be modified externally. Never run a suspended source directly. VM age alone does not authorize cleanup of a zero-timeout worker. Linux guests, positive runtime caps, start-before constraints, scratch reservations and shared host Nix volumes remain unsupported. Guest-local Nix stores benefit from Tart/APFS disk cloning without sharing a writable store.
+
+Orchard requires configuration-preserving suspended clones and power-state updates. Use verified HTTPS and Basic auth; `CACert` accepts a custom CA and `AllowInsecureHTTP` enables lab HTTP. Guests require SSH and passwordless sudo. Direct Tart optionally pins `Base.SSHHostKey`; otherwise it trusts the managed guest endpoint. Protect the state directory and controller access: native delivery records contain leases even though public listings and fingerprint journals do not.
+
+## Test and debug
+
+Run deterministic checks with `make test vet build`. For the complete race suite, VM lifecycle and real JobDB execution:
 
 ```sh
 # On an Apple Silicon Mac with Tart installed:
 ./scripts/test-macos.sh
 
-# Against an Orchard worker instead:
+# Or, against an Orchard worker:
 PULSE_TEST_ORCHARD_URL=http://192.168.1.195:6120 \
 PULSE_TEST_ORCHARD_WORKER=jnmac25.local \
 ./scripts/test-macos.sh orchard
 ```
 
-The script creates `test-results/<timestamp>-<backend>-<pid>/` and a `.tar.gz` archive beside it. Send the archive for debugging. Generated reports and archives are ignored by Git; the script remains versioned. Tests run from a source snapshot, so later workspace edits cannot change the running suite or its bundle comparisons. Reports include that snapshot and its fingerprints, host/tool versions, complete Go test events and readable logs, a coverage summary, JobDB counters, and VM diagnostics captured before cleanup. Private runtime journals and exported leases stay outside the archive; diagnostic text is redacted. Successful cleanup removes the private test state; failures print the retained location.
+Both modes test preparation, concurrent clones, reopen/replay, cleanup and actual JobDB completion: Nix execution, secret retrieval, renewal, and completed/expired lease rejection. **Tart mode also runs the standalone updater while an old clone stays running**, verifies replacement snapshot identities, and executes subsequent jobs from the new templates. That native update test still needs a real Mac validation run; the new initial-preparation flow and JobDB suite passed on Orchard.
 
-Every run executes the whole Go suite with the race detector and a live test that:
+The script prints progress and writes a Git-ignored `test-results/<timestamp>-<backend>-<pid>.tar.gz` archive containing a frozen source snapshot, full test logs and redacted diagnostics. Send that archive for debugging. Private journals and leases are excluded. Image preparation can take several minutes; native update testing builds the environment a second time. Each preparation phase allows 30 minutes within the 45-minute live-test deadline. Missing live, JobDB or required native-update assertions fail the script.
 
-- Prepares two independent suspended templates and runs concurrent clones.
-- Checks overflow, library reopen, duplicate suppression, slot reuse and cleanup.
-- Starts a disposable JobDB/Git service in a separate clone, keeping at most two VMs running.
-- Acquires a real lease and submits it through the public provider API to c2j.
-- Executes a job requiring `macos-*arm64`, using a real JobDB v2 lease; runs Nix `hello`, retrieves a synthetic secret, renews beyond the initial lease lifetime, and confirms completion.
-- Rejects completed and expired leases without claiming replacement work.
+Overrides: `PULSE_TEST_BASE=macos-15-arm64`, `PULSE_TEST_C2J_VERSION=<tag-or-commit>`, `PULSE_TEST_TART_HOME`, `PULSE_TEST_SSH_PASSWORD`, or `PULSE_TEST_IMAGE` with `PULSE_TEST_OS_VERSION`. Outbound GitHub/Nix access is required. The JobDB fixture uses synthetic credentials and SSH tunnels; no existing JobDB or exposed host port is needed.
 
-Live waits print their phase and periodic progress. Template preparation allows 30 minutes, JobDB service startup 3 minutes, and each worker completion 10 minutes, within a 45-minute live-test deadline. The script fails if the live test is skipped or any required JobDB assertion is missing. No existing JobDB, manually supplied lease, production secret, or inbound host port is needed. The fixture's control, JobDB, and Git ports stay on guest loopback addresses. SSH tunnels connect the worker to the disposable service, avoiding guest-to-guest routing and host port exposure. The integration bundle includes the fixture and a test-only wrapper that waits for the tunnel, then execs the same pinned c2j binary with stdin unchanged. The normal library bundle installs neither.
-
-The live test defaults to `macos-26-arm64`. Select Sequoia with `PULSE_TEST_BASE=macos-15-arm64 ./scripts/test-macos.sh`. To test a custom image, set `PULSE_TEST_IMAGE` and `PULSE_TEST_OS_VERSION` together. Additional overrides: `PULSE_TEST_SSH_PASSWORD` and `PULSE_TEST_TART_HOME`. Tests require outbound GitHub/Nix access and may take several minutes for first-time preparation. They never reset private state to retry an uncertain launch.
-
-See [image preparation](docs/prepared-images.md), [snapshot behavior and measurements](docs/suspended-templates.md), [the specification](SPEC.md), and [validation records](compatibility.json).
+See [image lifecycle details](docs/image-lifecycle.md), [snapshot measurements](docs/suspended-templates.md), [specification](SPEC.md), and [validation records](compatibility.json).

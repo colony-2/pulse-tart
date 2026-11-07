@@ -24,18 +24,16 @@ type Backend interface {
 	Delete(context.Context, string) error
 }
 type Provider struct {
-	Config  config.Settings
-	Store   *Store
-	Backend Backend
-	bundle  []byte
+	Config     config.Settings
+	Store      *Store
+	Backend    Backend
+	Setup      func(context.Context) ([]byte, error)
+	BaseScript []byte
 }
 
 func New(c config.Settings, b Backend) (*Provider, error) {
 	if _, ok := b.(templateBackend); !ok {
 		return nil, ErrBackend
-	}
-	if len(c.GuestBundle) == 0 || len(c.GuestBundle) > 4<<20 {
-		return nil, config.Err
 	}
 	s, e := OpenStore(c.StateDir, c.Scope())
 	if e != nil {
@@ -44,7 +42,7 @@ func New(c config.Settings, b Backend) (*Provider, error) {
 	return Attach(c, b, s), nil
 }
 func Attach(c config.Settings, b Backend, s *Store) *Provider {
-	return &Provider{Config: c, Store: s, Backend: b, bundle: c.GuestBundle}
+	return &Provider{Config: c, Store: s, Backend: b}
 }
 func (p *Provider) Close() error { return p.Store.Close() }
 func (p *Provider) Check(ctx context.Context) error {
@@ -202,19 +200,15 @@ func (p *Provider) plan(l compute.Launch) (backend.Spec, compute.Status) {
 	}
 	return backend.Spec{}, compute.Unsupported
 }
-func startup(bundle, envelope []byte, timeout int) string {
+func startup(envelope []byte) string {
 	return fmt.Sprintf(`#!/bin/bash
 set -eu
 set +x
 umask 077
 work=$(mktemp -d /tmp/pulse-bootstrap.XXXXXX)
 trap 'rm -rf "$work"' EXIT
-/usr/bin/base64 -D > "$work/bundle.tar.gz" <<'PULSE_BUNDLE'
-%s
-PULSE_BUNDLE
-/usr/bin/tar -xzf "$work/bundle.tar.gz" -C "$work"
-# Only fixed bootstrap inputs enter this shell. Lease data remains opaque.
-sudo -n /bin/bash "$work/bootstrap-guest.sh" "$work" %d
+# Tools already live in the suspended image. Never reinstall them on a job.
+sudo -n /bin/bash /opt/pulse-tart-image/bootstrap-guest.sh
 /usr/bin/base64 -D > "$work/envelope.json" <<'PULSE_ENVELOPE'
 %s
 PULSE_ENVELOPE
@@ -222,7 +216,7 @@ sudo -n /opt/pulse-tart/bin/pulse-tart-guest ingest < "$work/envelope.json"
 echo PULSE_HANDOFF_OK
 while ! sudo -n test -f /var/db/pulse-tart/complete; do sleep 1; done
 if [ "$(sudo -n cat /var/db/pulse-tart/complete)" = 0 ]; then echo PULSE_WORKER_OK; else echo PULSE_WORKER_FAILED; fi
-`, base64.StdEncoding.EncodeToString(bundle), timeout, base64.StdEncoding.EncodeToString(envelope))
+`, base64.StdEncoding.EncodeToString(envelope))
 }
 func normalized(v backend.Spec) backend.Spec {
 	if v.Labels == nil {
@@ -304,6 +298,9 @@ func (p *Provider) Reconcile(ctx context.Context) error {
 		}
 	}
 	if e = p.Store.save(); e != nil {
+		return e
+	}
+	if e := p.reconcileImages(ctx); e != nil {
 		return e
 	}
 	return p.reconcileSlots(ctx)

@@ -243,6 +243,7 @@ func (r *liveReport) capture(t *testing.T, ctx context.Context, kind string, con
 	var journal struct {
 		Records map[string]struct{ Name, UID string } `json:"records"`
 		Slots   map[string]struct{ Name, UID string } `json:"slots"`
+		Images  map[string]struct{ Name, UID string } `json:"images"`
 	}
 	data, _ := os.ReadFile(filepath.Join(stateDir, "state.json"))
 	_ = json.Unmarshal(data, &journal)
@@ -251,6 +252,9 @@ func (r *liveReport) capture(t *testing.T, ctx context.Context, kind string, con
 		owned[v.Name] = v.UID
 	}
 	for _, v := range journal.Slots {
+		owned[v.Name] = v.UID
+	}
+	for _, v := range journal.Images {
 		owned[v.Name] = v.UID
 	}
 	for n, uid := range r.extra {

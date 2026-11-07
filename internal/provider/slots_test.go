@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -17,13 +18,20 @@ func (f *fake) Events(_ context.Context, name string) ([]backend.Event, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	v := f.vms[name]
-	if !strings.HasPrefix(name, "pulse-template-") {
+	if strings.HasSuffix(name, "-base") {
+		v.LocalName = "local-" + name
+		v.Worker = v.Labels[config.WorkerNameLabel]
+		v.PowerState = "stopped"
+		v.Status = "failed"
+		v.Conditions = []backend.Condition{{Type: "running", State: "false"}}
+		f.vms[name] = v
+		return []backend.Event{{Payload: "PULSE_BASE_READY"}}, nil
+	}
+	if !strings.Contains(name, "-slot-") {
 		return nil, nil
 	}
-	n := 0
-	for _, c := range v.UID {
-		n += int(c)
-	}
+	digest := sha256.Sum256([]byte(v.UID))
+	n := int(digest[0])<<16 | int(digest[1])<<8 | int(digest[2])
 	id := fmt.Sprintf(`PULSE_TEMPLATE_READY {"mac":"02:00:00:%02x:%02x:%02x","boot_id":"00000000-0000-0000-0000-%012x"}`, n>>16, (n>>8)&255, n&255, n)
 	return []backend.Event{{Payload: id}}, nil
 }
@@ -69,7 +77,7 @@ func slotsFixture(t *testing.T, count int) (*Provider, *fake) {
 }
 func warmSlots(t *testing.T, p *Provider) {
 	t.Helper()
-	for range 3 {
+	for range 8 {
 		if err := p.Reconcile(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -82,7 +90,7 @@ func warmSlots(t *testing.T, p *Provider) {
 }
 func stopJobs(f *fake) {
 	for name, v := range f.vms {
-		if strings.HasPrefix(name, "pulse-template-") {
+		if strings.Contains(name, "-slot-") {
 			continue
 		}
 		v.Status = "failed"
@@ -107,8 +115,7 @@ func TestSlotAdmissionAndRestart(t *testing.T) {
 	}
 	for _, r := range []*Record{a, b} {
 		v := f.vms[r.Name]
-		s := p.Store.data.Slots[r.SlotID]
-		if v.CPU != 4 || v.Memory != 8192 || !v.Suspendable || v.Labels[config.WorkerNameLabel] != "mac-1" || !strings.Contains(v.StartupScript.Content, s.BootID) || !strings.Contains(v.StartupScript.Content, s.MAC) {
+		if v.CPU != 4 || v.Memory != 8192 || !v.Suspendable || v.Labels[config.WorkerNameLabel] != "mac-1" || !strings.Contains(v.StartupScript.Content, "saved['boot_id']") || !strings.Contains(v.StartupScript.Content, "saved['mac']") {
 			t.Fatal("slot hardware, placement or restore guard missing")
 		}
 	}
@@ -193,8 +200,8 @@ func TestSlotResizeDrainsAndRebuilds(t *testing.T) {
 	if err := p.Reconcile(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := f.vms[old]; ok {
-		t.Fatal("idle old template retained")
+	if _, ok := f.vms[old]; !ok {
+		t.Fatal("published source removed during resize")
 	}
 	if p.Store.data.Slots["small-0001"].Name == old {
 		t.Fatal("template name reused")
@@ -243,7 +250,7 @@ func TestSlotSizingAndMissingTemplate(t *testing.T) {
 	if err := p.Reconcile(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if p.Store.data.Slots["small-0001"].Name == old || f.creates != 2 {
+	if p.Store.data.Slots["small-0001"].Name != old || f.creates != 2 {
 		t.Fatal("missing unused template not rebuilt")
 	}
 }
@@ -283,8 +290,14 @@ func TestSlotDrainAndLegacyJournalRejection(t *testing.T) {
 	if err := p.Reconcile(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if len(p.Store.data.Slots) != 0 || len(f.vms) != 0 {
-		t.Fatal("drain retained templates")
+	if len(p.Store.data.Slots) != 0 || len(f.vms) != 1 {
+		t.Fatal("drain must release reservations and preserve published images")
+	}
+	if err := p.PurgeImages(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.vms) != 0 {
+		t.Fatal("explicit purge retained templates")
 	}
 	out, _ := p.Submit(t.Context(), []compute.Launch{launch("drained")})
 	if out[0].Status != compute.NoCapacity {

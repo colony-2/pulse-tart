@@ -465,3 +465,110 @@ func TestDeliveryWaitsForSuspendedCloneToResume(t *testing.T) {
 		t.Fatal("recovery restarted delivery to completed suspended VM")
 	}
 }
+
+func TestPublishedSourceReplacementDoesNotChangeExistingClone(t *testing.T) {
+	b, m, s := fixture(t)
+	source, err := b.Create(t.Context(), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = b.Suspend(t.Context(), s.Name, source.UID); err != nil {
+		t.Fatal(err)
+	}
+	if err = b.RetainSource(t.Context(), s.Name, source.UID); err != nil {
+		t.Fatal(err)
+	}
+	old := s
+	old.Name = "old-job"
+	old.Image = s.Name
+	if _, err = b.Create(t.Context(), old); err != nil {
+		t.Fatal(err)
+	}
+	// Model `tart clone --overwrite staged template`: a new directory, snapshot,
+	// and MAC under the published name, while the previous job remains running.
+	m.mu.Lock()
+	before := m.vms[old.Name]
+	if err = os.RemoveAll(b.path(s.Name)); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.MkdirAll(b.path(s.Name), 0700); err != nil {
+		t.Fatal(err)
+	}
+	replacement := m.vms[s.Name]
+	replacement.MACAddress = "02:00:00:00:00:99"
+	m.vms[s.Name] = replacement
+	m.mu.Unlock()
+	if _, err = b.Get(t.Context(), s.Name); err != nil {
+		t.Fatal("published source rejected after replacement", err)
+	}
+	next := old
+	next.Name = "new-job"
+	if _, err = b.Create(t.Context(), next); err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	if m.vms[old.Name] != before || m.vms[next.Name].MACAddress != replacement.MACAddress {
+		t.Error("replacement affected the wrong clone")
+	}
+	m.mu.Unlock()
+	if _, err = b.Get(t.Context(), old.Name); err != nil {
+		t.Fatal("old clone lost its ownership binding", err)
+	}
+	// The relaxed source rules must never relax job-clone ownership.
+	if err = os.Remove(filepath.Join(b.path(old.Name), ".pulse-owner")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = b.Get(t.Context(), old.Name); err == nil {
+		t.Fatal("job ownership mismatch accepted")
+	}
+}
+
+func TestAdoptExternalPreparedSourceAndColdClone(t *testing.T) {
+	b, m, s := fixture(t)
+	s.Name = "published-base"
+	m.vms[s.Name] = hardware{Name: s.Name, CPU: 4, Memory: 8192, State: "stopped", MACAddress: "02:00:00:00:00:31"}
+	if err := os.MkdirAll(b.path(s.Name), 0700); err != nil {
+		t.Fatal(err)
+	}
+	source, err := b.AdoptSource(t.Context(), s, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source.PowerState != "stopped" {
+		t.Fatal(source.PowerState)
+	}
+	slot := s
+	slot.Name = "larger-slot"
+	slot.Image = s.Name
+	slot.CPU = 8
+	slot.Memory = 16384
+	if _, err = b.Create(t.Context(), slot); err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.vms[slot.Name].CPU != 8 || m.vms[slot.Name].Memory != 16384 || m.vms[slot.Name].MACAddress == m.vms[s.Name].MACAddress {
+		t.Fatal("stopped base did not produce independently configured slot")
+	}
+}
+
+func TestDeletedReusableSourceCanBePreparedAgain(t *testing.T) {
+	b, m, s := fixture(t)
+	m.vms[s.Name] = hardware{Name: s.Name, CPU: s.CPU, Memory: s.Memory, State: "stopped", MACAddress: "02:00:00:00:00:31"}
+	if err := os.MkdirAll(b.path(s.Name), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.AdoptSource(t.Context(), s, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(b.path(s.Name)); err != nil {
+		t.Fatal(err)
+	}
+	delete(m.vms, s.Name)
+	if _, err := b.AdoptSource(t.Context(), s, nil); !backend.IsStatus(err, 404) {
+		t.Fatal(err)
+	}
+	if _, err := b.Create(t.Context(), s); err != nil {
+		t.Fatal("deleted source could not be rebuilt", err)
+	}
+}

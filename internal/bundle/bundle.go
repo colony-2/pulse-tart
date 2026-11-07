@@ -5,15 +5,17 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io/fs"
+	"regexp"
 	"sort"
 	"strings"
 )
 
-func Build(source fs.FS, profile string) ([]byte, error) {
+func Build(source fs.FS, profile, revision string) ([]byte, error) {
+	if !regexp.MustCompile(`^[a-f0-9]{40}$`).MatchString(revision) {
+		return nil, fmt.Errorf("invalid c2j revision")
+	}
 	files := map[string][]byte{}
 	err := fs.WalkDir(source, ".", func(path string, d fs.DirEntry, e error) error {
 		if e != nil {
@@ -33,22 +35,18 @@ func Build(source fs.FS, profile string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	input := regexp.MustCompile(`inputs\.c2j\.url = "github:colony-2/c2j[^\"]*";`)
+	if !input.Match(files["flake.nix"]) {
+		return nil, fmt.Errorf("missing c2j build input")
+	}
+	files["flake.nix"] = input.ReplaceAll(files["flake.nix"], []byte(`inputs.c2j.url = "github:colony-2/c2j/`+revision+`";`))
 	names := []string{}
 	for name := range files {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	h := sha256.New()
-	fmt.Fprintln(h, profile)
-	for _, n := range names {
-		if n == "flake.nix" || n == "flake.lock" || n == "install-guest.sh" || strings.HasPrefix(n, "guest/") || (profile == "integration" && strings.HasPrefix(n, "tests/")) {
-			fmt.Fprintf(h, "%s\x00%d\x00", n, len(files[n]))
-			h.Write(files[n])
-		}
-	}
-	files["environment.sha256"] = []byte(hex.EncodeToString(h.Sum(nil)) + "\n")
 	files["profile"] = []byte(profile + "\n")
-	names = append(names, "environment.sha256", "profile")
+	names = append(names, "profile")
 	sort.Strings(names)
 	var out bytes.Buffer
 	gz := gzip.NewWriter(&out)

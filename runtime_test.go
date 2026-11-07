@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"github.com/colony-2/pulse-tart/internal/bundle"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -51,7 +52,7 @@ func TestSharedConfigAndCopies(t *testing.T) {
 }
 func TestEmbeddedBundleMatchesPreparationScript(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "bundle.tar.gz")
-	cmd := exec.Command("bash", "scripts/build-bundle.sh", dest)
+	cmd := exec.Command("bash", "scripts/build-bundle.sh", dest, "--c2j", strings.Repeat("a", 40))
 	if out, e := cmd.CombinedOutput(); e != nil {
 		t.Fatalf("%v: %s", e, out)
 	}
@@ -80,7 +81,7 @@ func TestEmbeddedBundleMatchesPreparationScript(t *testing.T) {
 		}
 		return files
 	}
-	a, e := GuestBundle()
+	a, e := bundle.Build(assets, "default", strings.Repeat("a", 40))
 	if e != nil {
 		t.Fatal(e)
 	}

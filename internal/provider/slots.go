@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -33,6 +32,7 @@ type SlotRecord struct {
 	MAC        string    `json:"mac"`
 	BootID     string    `json:"boot_id"`
 	Created    time.Time `json:"created"`
+	Probe      bool      `json:"probe,omitempty"`
 }
 
 type slotTarget struct {
@@ -44,7 +44,7 @@ type slotTarget struct {
 
 func validSlotPhase(s string) bool {
 	switch s {
-	case "dispatch", "preparing", "suspending", "ready", "deleting", "quarantine", "failed":
+	case "dispatch", "preparing", "suspending", "ready", "deleting", "quarantine", "failed", "fallback":
 		return true
 	}
 	return false
@@ -54,37 +54,31 @@ func (p *Provider) slotTargets() (map[string]slotTarget, error) {
 	targets := map[string]slotTarget{}
 	for _, group := range p.Config.Slots {
 		img := p.base(group.Base)
-		labels := map[string]string{}
-		for k, v := range p.Config.WorkerLabels {
-			labels[k] = v
+		spec := p.sourceSpec(img, group.CPU, group.MemoryMiB)
+		if image := p.Store.data.Images[config.BaseImageName(p.Config.OwnerID, img.Name)]; image != nil && image.Phase == "ready" {
+			spec.Image = image.LocalName
+		} else {
+			spec.Image = ""
 		}
-		labels[config.WorkerNameLabel] = p.Config.Worker
-		spec := backend.Spec{OS: "darwin", Arch: "arm64", Runtime: "tart", Image: img.Image, CPU: group.CPU, Memory: group.MemoryMiB, Headless: true, Username: img.SSHUsername, Password: string(img.SSHPassword), RestartPolicy: "Never", Suspendable: true, Labels: labels, Resources: map[string]int64{"org.cirruslabs.logical-cores": group.CPU, "org.cirruslabs.memory-mib": group.MemoryMiB, "org.cirruslabs.tart-vms": 1}, StartupScript: backend.Script{Content: templateStartup(p.bundle, int(p.Config.BootstrapTimeout.Seconds()), img), Env: map[string]string{}}}
+		spec.StartupScript.Content = templateStartup(int(p.Config.BootstrapTimeout.Seconds()), img)
 		target := slotTarget{spec: spec, image: group.Base, worker: p.Config.Worker, hash: p.Store.hash(struct {
-			Base    string
-			Spec    backend.Spec
-			HostKey []byte
-		}{group.Base, spec, img.SSHHostKey})}
+			Base        config.Base
+			CPU, Memory int64
+			Group       string
+		}{img, group.CPU, group.MemoryMiB, group.Name})}
 		for i := 0; i < group.Count; i++ {
-			targets[fmt.Sprintf("%s-%04d", group.Name, i+1)] = target
+			t := target
+			t.spec.Name = config.SlotImageName(p.Config.OwnerID, group, i+1)
+			targets[fmt.Sprintf("%s-%04d", group.Name, i+1)] = t
 		}
 	}
 	return targets, nil
 }
-
-func templateStartup(bundle []byte, seconds int, base config.Base) string {
-	return fmt.Sprintf(`#!/bin/bash
-set -eu
-set +x
-umask 077
-work=$(mktemp -d /tmp/pulse-template.XXXXXX)
-trap 'rm -rf "$work"' EXIT
-/usr/bin/base64 -D > "$work/bundle.tar.gz" <<'PULSE_BUNDLE'
-%s
-PULSE_BUNDLE
-/usr/bin/tar -xzf "$work/bundle.tar.gz" -C "$work"
-sudo -n /bin/bash "$work/prepare-template.sh" "$work" %d %s %s
-`, base64.StdEncoding.EncodeToString(bundle), seconds, base.OSVersion, "'"+strings.Join(base.Capabilities, " ")+"'")
+func templateStartup(seconds int, base config.Base) string {
+	return fmt.Sprintf("#!/bin/bash\nset -eu\nsudo -n /bin/bash /opt/pulse-tart-image/prepare-template.sh %d %s '%s'\n", seconds, base.OSVersion, strings.Join(base.Capabilities, " "))
+}
+func (p *Provider) cacheSlot(s *SlotRecord) {
+	p.Store.data.Images[s.Name] = &ImageRecord{Name: s.Name, UID: s.UID, NativeHash: s.NativeHash, Phase: "ready", LocalName: s.LocalName, Worker: s.Worker, Kind: "slot", Created: s.Created}
 }
 
 func (p *Provider) slotBusy(id string) bool {
@@ -122,7 +116,7 @@ func validSlotIdentity(s *SlotRecord) bool {
 			return false
 		}
 	}
-	return s.Phase != "ready" || (s.UID != "" && s.LocalName != "" && s.MAC != "" && s.BootID != "")
+	return s.Phase != "ready" || (s.UID != "" && s.LocalName != "")
 }
 
 func templateIdentity(events []backend.Event) (mac, boot string, ok bool) {
@@ -169,6 +163,12 @@ func (p *Provider) reconcileSlots(ctx context.Context) error {
 	sort.Strings(ids)
 	for _, id := range ids {
 		s := p.Store.data.Slots[id]
+		if s.Phase == "fallback" {
+			if _, wanted := targets[id]; !wanted && !p.slotBusy(id) {
+				delete(p.Store.data.Slots, id)
+			}
+			continue
+		}
 		if s.Phase == "quarantine" {
 			continue
 		}
@@ -194,7 +194,12 @@ func (p *Provider) reconcileSlots(ctx context.Context) error {
 			if p.slotBusy(id) {
 				continue
 			}
-			// Unused builders contain no job. Suspend them before retiring a changed config.
+			if s.Phase == "ready" && strings.HasPrefix(s.Name, "pulse-") && !strings.HasPrefix(s.Name, "pulse-template-") {
+				p.cacheSlot(s)
+				delete(p.Store.data.Slots, id)
+				continue
+			}
+			// Legacy or incomplete builders are owned by the journal, not published sources.
 			if !v.Stopped() {
 				if err = b.Suspend(ctx, s.Name, s.UID); err != nil {
 					return ErrBackend
@@ -217,6 +222,18 @@ func (p *Provider) reconcileSlots(ctx context.Context) error {
 			continue
 		}
 		if v.Status == "failed" && v.Stopped() {
+			if s.Probe {
+				if err := p.Backend.Delete(ctx, s.Name); err != nil {
+					return err
+				}
+				s.Probe = false
+				s.Phase = "fallback"
+				s.UID = ""
+				if err := p.Store.save(); err != nil {
+					return err
+				}
+				continue
+			}
 			s.Phase = "failed"
 			continue
 		}
@@ -257,8 +274,12 @@ func (p *Provider) reconcileSlots(ctx context.Context) error {
 				s.Phase = "quarantine"
 				continue
 			}
+			if err := p.retain(ctx, s.Name, s.UID); err != nil {
+				return err
+			}
 			s.LocalName = v.LocalName
 			s.Phase = "ready"
+			p.cacheSlot(s)
 		} else {
 			s.Phase = "suspending"
 			if err = p.Store.save(); err != nil {
@@ -279,12 +300,41 @@ func (p *Provider) reconcileSlots(ctx context.Context) error {
 	}
 	sort.Strings(ids)
 	for _, id := range ids {
-		if p.Store.data.Slots[id] != nil || p.slotBusy(id) {
+		old := p.Store.data.Slots[id]
+		fallback := old != nil && old.Phase == "fallback"
+		if (old != nil && !fallback) || p.slotBusy(id) {
 			continue
 		}
 		t := targets[id]
-		t.spec.Name = "pulse-template-" + p.Config.Scope()[:12] + "-" + id + "-" + newID()
-		s := &SlotRecord{ID: id, Name: t.spec.Name, NativeHash: p.Store.hash(t.spec), ConfigHash: t.hash, Phase: "dispatch", Worker: t.worker, Created: time.Now().UTC()}
+		// Reuse the published source by name, even when it was built by the
+		// standalone script or replaced since this journal last observed it.
+		existing, err := p.adopt(ctx, t.spec, p.base(t.image))
+		if err == nil {
+			if !suspended(existing) || existing.Worker != t.worker || existing.CPU != t.spec.CPU || existing.Memory != t.spec.Memory {
+				return fmt.Errorf("slot source %s is not suspended or has incompatible hardware", t.spec.Name)
+			}
+			if err := p.retain(ctx, existing.Name, existing.UID); err != nil {
+				return err
+			}
+			s := &SlotRecord{ID: id, Name: existing.Name, UID: existing.UID, NativeHash: p.Store.hash(normalized(existing.Spec)), ConfigHash: t.hash, Phase: "ready", Worker: t.worker, LocalName: existing.LocalName, Created: time.Now().UTC()}
+			p.Store.data.Slots[id] = s
+			p.cacheSlot(s)
+			if err := p.Store.save(); err != nil {
+				return err
+			}
+			continue
+		}
+		if !backend.IsStatus(err, 404) {
+			return err
+		}
+		if t.spec.Image == "" {
+			continue
+		} // Prepare the shared base once first.
+		probe := p.probesSources() && !fallback
+		if probe {
+			t.spec.Image = t.spec.Name
+		}
+		s := &SlotRecord{ID: id, Name: t.spec.Name, NativeHash: p.Store.hash(t.spec), ConfigHash: t.hash, Phase: "dispatch", Worker: t.worker, Created: time.Now().UTC(), Probe: probe}
 		p.Store.data.Slots[id] = s
 		if err = p.Store.save(); err != nil {
 			return err
@@ -370,16 +420,26 @@ func (p *Provider) chooseSlot(ctx context.Context, l compute.Launch, spec backen
 		spec.StartupScript.Env = map[string]string{"PULSE_LAUNCH_ID": l.LaunchID, "PULSE_JOBDB": l.Job.JobDB, "PULSE_JOBDB_INSTANCE_ID": l.Job.InstanceID, "PULSE_TENANT_ID": l.Job.TenantID, "PULSE_JOB_ID": l.Job.JobID}
 
 		payload, _ := json.Marshal(envelope{1, l.LaunchID, workerProcess(l, p.base(t.image), spec.CPU, spec.Memory)})
-		spec.StartupScript.Content = startup(p.bundle, payload, int(p.Config.BootstrapTimeout.Seconds()))
-		// Prevent accidental cold boots (including Tart's MAC-collision fallback)
-		// from executing a lease. Only a true restore of this slot may accept work.
+		spec.StartupScript.Content = startup(payload)
+		// Read identity from this clone's snapshot, not an old host-side cache.
+		// Published replacements deliberately have fresh MAC and boot identities.
 		guard := fmt.Sprintf(`
-if [ "$(/usr/sbin/sysctl -n kern.bootsessionuuid)" != '%s' ] || [ "$(/sbin/ifconfig en0 | /usr/bin/awk '/ether / {print $2; exit}')" != '%s' ]; then
-  echo PULSE_TEMPLATE_RESTORE_FAILED
-  sudo -n /sbin/shutdown -h now
-  exit 1
+if ! sudo -n /opt/pulse-tart/bin/python3 - <<'PULSE_RESTORE'
+import json,re,subprocess
+saved=json.load(open('/var/db/pulse-tart-template/ready'))
+def read(*args): return subprocess.check_output(args,text=True).strip()
+assert read('/usr/sbin/sysctl','-n','kern.bootsessionuuid') == saved['boot_id']
+assert re.search(r'\bether\s+([0-9a-f:]{17})',read('/sbin/ifconfig','en0')).group(1) == saved['mac']
+assert int(read('/usr/sbin/sysctl','-n','hw.ncpu')) == %d
+assert int(read('/usr/sbin/sysctl','-n','hw.memsize')) == %d
+assert read('/usr/bin/sw_vers','-productVersion') == '%s'
+PULSE_RESTORE
+then
+ echo PULSE_TEMPLATE_RESTORE_FAILED
+ sudo -n /sbin/shutdown -h now
+ exit 1
 fi
-`, s.BootID, s.MAC)
+`, spec.CPU, spec.Memory*(1<<20), p.base(t.image).OSVersion)
 		spec.StartupScript.Content = strings.Replace(spec.StartupScript.Content, "umask 077", "umask 077"+guard, 1)
 		return spec, id, compute.Accepted
 	}
@@ -393,7 +453,7 @@ type SlotStatus struct {
 	Phase    string `json:"phase"`
 	Worker   string `json:"worker"`
 	Template string `json:"template"`
-	MAC      string `json:"mac,omitempty"`
+	MAC      string `json:"mac,omitempty"` // Preparation-time observation; may be empty or stale after external replacement.
 	Busy     bool   `json:"busy"`
 }
 

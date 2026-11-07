@@ -42,6 +42,7 @@ type record struct {
 	HostKey   []byte       `json:"host_key,omitempty"`
 	Created   time.Time    `json:"created"`
 	Delivered bool         `json:"delivered"`
+	Reusable  bool         `json:"reusable,omitempty"` // Published source; replacement under this name is intentional.
 }
 type hardware struct {
 	CPU        int64
@@ -266,11 +267,11 @@ func (b *Client) get(ctx context.Context, name string) (backend.VM, error) {
 		}
 		return backend.VM{}, &backend.Error{Code: 404}
 	}
-	if b.binding(r, false) != nil {
+	if !r.Reusable && b.binding(r, false) != nil {
 		return backend.VM{}, Err
 	}
 	h, e := b.inspect(ctx, name)
-	if e != nil || h.CPU != r.Spec.CPU || h.Memory != r.Spec.Memory || h.MACAddress != r.MAC {
+	if e != nil || h.CPU != r.Spec.CPU || h.Memory != r.Spec.Memory || (!r.Reusable && h.MACAddress != r.MAC) {
 		return backend.VM{}, Err
 	}
 	v := backend.VM{Spec: r.Spec, UID: r.UID, Worker: "local", LocalName: name, CreatedAt: r.Created, PowerState: h.State, Generation: 1, ObservedGeneration: 1, Status: "pending"}
@@ -282,7 +283,7 @@ func (b *Client) get(ctx context.Context, name string) (backend.VM, error) {
 	case "suspended":
 		v.Status = "running"
 	case "stopped":
-		if b.runExited(r) || r.Phase == "prepared" {
+		if r.Reusable || b.runExited(r) || r.Phase == "prepared" {
 			v.Status = "failed"
 		} else {
 			running = "true"
@@ -340,6 +341,7 @@ func (b *Client) Create(ctx context.Context, s backend.Spec) (backend.VM, error)
 	}
 	var key []byte
 	template := strings.Contains(s.Image, "@sha256:")
+	cold := template
 	if template {
 		found := false
 		for _, base := range b.bases {
@@ -358,10 +360,15 @@ func (b *Client) Create(ctx context.Context, s backend.Spec) (backend.VM, error)
 			return backend.VM{}, Err
 		}
 		v, e := b.get(ctx, s.Image)
-		if e != nil || v.PowerState != "suspended" {
+		if e != nil || (v.PowerState != "suspended" && !(parent.Reusable && v.PowerState == "stopped")) {
 			return backend.VM{}, Err
 		}
+		cold = v.PowerState == "stopped"
 		key = parent.HostKey
+		sourceHardware, err := b.inspect(ctx, s.Image)
+		if err != nil {
+			return backend.VM{}, Err
+		}
 		data, e := b.command(ctx, "list", "--source", "local", "--format", "json")
 		if e != nil {
 			return backend.VM{}, Err
@@ -375,7 +382,9 @@ func (b *Client) Create(ctx context.Context, s backend.Spec) (backend.VM, error)
 				continue
 			}
 			h, e := b.inspect(ctx, vm.Name)
-			if e != nil || h.MACAddress == parent.MAC {
+			// The published source can be replaced between observation and clone.
+			// Collision checks against the actual cloned MAC happen below.
+			if e != nil || (!cold && h.MACAddress == sourceHardware.MACAddress) {
 				return backend.VM{}, Err
 			}
 		}
@@ -392,7 +401,7 @@ func (b *Client) Create(ctx context.Context, s backend.Spec) (backend.VM, error)
 	if _, e := b.command(ctx, "clone", s.Image, s.Name); e != nil {
 		return backend.VM{}, Err
 	}
-	if template {
+	if cold {
 		if _, e := b.command(ctx, "set", s.Name, "--cpu", strconv.FormatInt(s.CPU, 10), "--memory", strconv.FormatInt(s.Memory, 10), "--random-mac"); e != nil {
 			return backend.VM{}, Err
 		}
@@ -400,6 +409,26 @@ func (b *Client) Create(ctx context.Context, s backend.Spec) (backend.VM, error)
 	h, e := b.inspect(ctx, s.Name)
 	if e != nil || h.CPU != s.CPU || h.Memory != s.Memory || h.MACAddress == "" {
 		return backend.VM{}, Err
+	}
+	if !cold && h.State != "suspended" {
+		return backend.VM{}, Err
+	}
+	data, e := b.command(ctx, "list", "--source", "local", "--format", "json")
+	if e != nil {
+		return backend.VM{}, Err
+	}
+	var inventory []hardware
+	if json.Unmarshal(data, &inventory) != nil {
+		return backend.VM{}, Err
+	}
+	for _, vm := range inventory {
+		if vm.Name == s.Name || (vm.State != "running" && !vm.Running) {
+			continue
+		}
+		other, err := b.inspect(ctx, vm.Name)
+		if err != nil || other.MACAddress == h.MACAddress {
+			return backend.VM{}, Err
+		}
 	}
 	r.MAC = h.MACAddress
 	if b.binding(r, true) != nil {
@@ -586,7 +615,7 @@ func (b *Client) deliver(r *record) {
 				if e == nil && net.ParseIP(ip) != nil {
 					e = b.send(ctx, ip, spec, key)
 					events, _ := os.ReadFile(filepath.Join(b.dir, name+".events"))
-					if e == nil || bytes.Contains(events, []byte("PULSE_HANDOFF_OK")) {
+					if e == nil || bytes.Contains(events, []byte("PULSE_HANDOFF_OK")) || bytes.Contains(events, []byte("PULSE_BASE_READY")) || bytes.Contains(events, []byte("PULSE_TEMPLATE_READY")) {
 						b.mu.Lock()
 						r.Delivered = true
 						_ = b.save(r)

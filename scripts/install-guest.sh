@@ -1,29 +1,12 @@
 #!/bin/bash
-# Shared installation path for disposable workers and prepared base images.
+# Installation path for unused prepared base images. Never run during a job.
 set -euo pipefail
 set +x
 umask 077
 bundle=$1
 [[ $(uname -s) == Darwin && $(uname -m) == arm64 && $EUID == 0 ]]
-[[ -f "$bundle/environment.sha256" ]]
 mkdir -p /var/db/pulse-tart
 chmod 700 /var/db/pulse-tart
-manifest=/opt/pulse-tart-image
-# A matching prepared image avoids flake evaluation and network access.
-if [[ -f "$manifest/environment.sha256" && -f "$manifest/store-path" ]] &&
-   cmp -s "$bundle/environment.sha256" "$manifest/environment.sha256" &&
-   [[ -L /opt/pulse-tart && $(readlink /opt/pulse-tart) == "$(cat "$manifest/store-path")" ]] &&
-   [[ $(/nix/var/nix/profiles/default/bin/nix --version) == 'nix (Nix) 2.35.4' ]] &&
-   [[ $(id -u pulseworker) == 55050 ]]; then
-  valid=1
-  for tool in c2j pulse-tart-guest git node pnpm uv python3; do
-    [[ -x /opt/pulse-tart/bin/$tool ]] || valid=0
-  done
-  if [[ $valid == 1 ]]; then
-    echo PULSE_IMAGE_CACHE_HIT
-    exit 0
-  fi
-fi
 export HOME=/var/root
 export PATH=/nix/var/nix/profiles/default/bin:/usr/bin:/bin:/usr/sbin:/sbin
 if ! command -v nix >/dev/null; then

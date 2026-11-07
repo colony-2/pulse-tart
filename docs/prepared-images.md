@@ -1,37 +1,52 @@
-# Prepare a macOS worker image
+# Prepare or update macOS images
 
-`tart.DefaultBases()` provides pinned Tahoe 26.6.2 and Sequoia 15.7.7 images, in that preference order. Each entry includes the exact version checked during bootstrap. Use these as the starting image, or supply your own digest-pinned image.
-
-The library automatically installs pinned Nix, c2j, the guest runner, Git, Node/pnpm, uv and Python when preparing a slot. To avoid repeating installation for new slot templates, bake the same environment into a reusable base image.
-
-Build the archive from the same checkout as the library:
+Run `scripts/update-macos-images.sh` on the Apple Silicon worker from a pulse-tart checkout. Use the same account and `TART_HOME` as the Tart/Orchard worker. The command needs Tart with `clone --overwrite` (reviewed against 2.41.1), Python 3, curl, shasum and OpenSSH. Nix runs inside the guest, not on the host.
 
 ```sh
-make bundle
-# dist/guest-bundle.tar.gz
+./scripts/update-macos-images.sh \
+  --owner mac-pool --base macos-26-arm64 --group standard \
+  --slots 2 --cpu 4 --memory 8192
 ```
 
-Library users can also obtain the archive from `tart.GuestBundle()`. It contains the pinned flake, guest source and installation scripts, so the VM does not need a separate checkout. The library embeds these assets; a separately installed bundle is unnecessary for normal operation. `Config.GuestBundle` is an optional trusted override.
+Match these values to `Config.OwnerID` and the slot group. The default base is Tahoe; Sequoia is available as `--base macos-15-arm64`. Sizes are vCPU and MiB. Repeat for other groups/sizes. Keep one VM position free for preparation; the script builds one VM at a time but does not coordinate capacity with Pulse.
 
-Copy and extract the archive **inside a fresh macOS ARM64 VM** with SSH, passwordless sudo and outbound GitHub/Nix access:
+Options:
 
-```sh
-mkdir -p /tmp/pulse-image
-tar -xzf /tmp/guest-bundle.tar.gz -C /tmp/pulse-image
-sudo /bin/bash /tmp/pulse-image/prepare-image.sh --shutdown
+| Option | Behavior |
+| --- | --- |
+| `--c2j latest` | Default: resolve the latest published c2j release when preparing |
+| `--c2j <tag-or-commit>` | Build that selection; branches also work |
+| `--ensure` | Prepare only missing sources; reuse existing matching stopped/suspended images |
+| `--image <digest-reference> --os-version <version>` | Override the catalog image and exact guest OS check together |
+| `--ssh-user <user>` | Default `admin`; password from `PULSE_IMAGE_SSH_PASSWORD`, default `admin` |
+| `--timeout <seconds>` | Per-VM preparation limit, default 2700 |
+
+The guest must support SSH/passwordless sudo and reach GitHub/Nix. The script prints its temporary log directory and each preparation/publication phase. On failure it retains logs there. `PULSE_IMAGE_LOG_DIR=/path` additionally copies build/run logs to a chosen directory. It cleans up only its own staging VMs. An interrupted process that cannot run cleanup may leave a per-pool update lock; remove that lock only after verifying no updater remains active.
+
+## Names and publication
+
+For the example above, the canonical local names are:
+
+```text
+pulse-mac-pool-macos-26-arm64-base
+pulse-mac-pool-macos-26-arm64-standard-4cpu-8192m-slot-0001
+pulse-mac-pool-macos-26-arm64-standard-4cpu-8192m-slot-0002
 ```
 
-`PULSE_IMAGE_PREPARED` confirms preparation. The script preserves the Nix daemon, `/nix`, the `/opt/pulse-tart` profile, its environment fingerprint and the unprivileged worker account. It installs no worker service and accepts no lease. Repeating preparation on the unused builder is safe. A VM containing execution state or runtime services is rejected; this script does not clean used workers.
+Names contain the owner, base and, for slots, group/size/index. c2j versions never enter the names. Long or unusual owner/base/group values use a deterministic hashed token; `scripts/image-names.py` and the provider use the same rules.
 
-After clean shutdown, publish from the Mac host using your existing image pipeline. For example:
+Orchard adds `orchard-` plus a UUID/restart suffix to its native image names. The script discovers matching aliases using `tart list` and publishes replacements to those names as well as the canonical names. This requires no controller API call. When the provider first encounters script-created canonical images, direct Tart adopts them; Orchard clones them into its managed records. A missing Orchard local source probe falls back to automatic installation.
 
-```sh
-tart login registry.example.com
-tart push pulse-image-builder registry.example.com/team/pulse-macos:v1
-```
+Every update starts from the configured raw OS image, installs the selected c2j once into a stopped base, then boots and suspends each requested slot with independent hardware identity. All replacements are prepared before publication. `tart clone --overwrite` takes Tart's storage lock for each replacement. A concurrent clone sees the source before or after that replacement.
 
-Keep registry credentials outside the image. Publishing is a separate operator action. Set `Base.Image` to the resulting manifest digest, `Base.OSVersion` to the actual guest version, and `Base.Name` to a concrete name such as `macos-26-arm64`. Set SSH credentials to those baked into the image; configure registry pull access on the Orchard worker or local Tart host.
+Existing ordinary job clones keep their own disk/configuration/saved state and continue unaffected. A clone already created before publication also keeps the old environment even if it starts afterward. New clones use the replacement. Each new slot template has a fresh MAC and boot UUID; job startup checks its own snapshot's saved identity rather than a cached identity from the provider.
 
-The library verifies the prepared environment fingerprint and tool paths. A match skips installation; a mismatch rebuilds the pinned environment. Changing c2j, Nix inputs, guest code or installation settings requires rebuilding the image to retain that shortcut. Never edit fingerprints to force a match.
+Publication is per image, not a transaction across the pool. Preparation failure leaves published sources untouched. Publication failure reports an error and can leave some sources updated; rerunning repairs the pool. Do not run suspended sources directly, use stacked clones, or modify job clones. The provider still permits only one active/unresolved job per configured slot.
 
-Each job still uses a fresh clone. Snapshot restore reuses the slot's prepared disk and memory; it does not rerun a previously executed guest. Nix stores are guest-local. Historical measurements were approximately 17.7 seconds for a fresh stopped-image clone and 8.2 seconds for a prepared suspended clone; these exclude initial image download and template preparation and are not job-completion times. See [snapshot measurements](suspended-templates.md).
+## Version selection and inspection
+
+The library's `Config.C2JVersion` selects a release only when it must install a missing base. Existing bases and templates remain authoritative. Neither a library upgrade nor changing that setting implicitly replaces them. The updater is the explicit refresh mechanism; no Pulse release or restart is required.
+
+The selector resolves a release/tag/branch to a commit before Nix builds it. Lookup errors fail preparation; there is no fallback to a library-pinned c2j. The selected tools are available under `/opt/pulse-tart/bin`. Inspect `c2j version` inside a disposable clone to see the installed version. There is no release manifest or version sidecar. The snapshot readiness file records boot UUID/MAC for restore verification, not software version.
+
+`build-bundle.sh` and the guest-side `prepare-image.sh` remain internal setup helpers. The archive contains shell scripts, Nix definitions and guest-launcher source. Nix fetches/builds c2j inside the VM. Normal library users and operators need only the configuration API or `update-macos-images.sh`.

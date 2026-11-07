@@ -1,6 +1,6 @@
 {
   "validation_date": "2026-11-05",
-  "status": "Tahoe 26.6.2 full Orchard and direct Tart suites passed with concrete execution base and JobDB v2 leases",
+  "status": "Shared-base preparation and installed-worker execution passed the full Orchard suite; new standalone/native source-update flow awaits macOS live validation.",
   "provider": {
     "module": "github.com/colony-2/pulse-tart",
     "api": "github.com/colony-2/pulse-provider-api",
@@ -22,9 +22,10 @@
     "c2j_darwin_vendor_hash": "sha256-8Itaug8GetE03n1IfjJKblwGwBA1/m9mmcywOeK2oxM="
   },
   "c2j": {
-    "commit": "d6553a24682773c4f5d7777edf93af657ffad453",
-    "jobdb_version": "v0.0.71-0.20261105015051-24f616ca4ffe",
-    "lease_format_version": 2
+    "selection": "latest published release by default, resolved when installing a missing base or explicitly updating images",
+    "override": "Config.C2JVersion or updater --c2j",
+    "lease_format_version": 2,
+    "note": "Historical validation records below identify the revisions tested at those times; no c2j release is compiled into this library."
   },
   "orchard": {
     "version": "unknown",
@@ -86,7 +87,8 @@
     "not_run": [
       "hosted CI workflows",
       "production TLS/roles",
-      "Orchard controller/worker restart fault injection"
+      "Orchard controller/worker restart fault injection",
+      "Direct Tart with a release-selected guest bundle"
     ],
     "direct_tart_lifecycle": {
       "result": "passed",
@@ -354,6 +356,92 @@
       "host_macos": "26.7.2",
       "tart_version": "2.41.1",
       "source_snapshot": "All recorded source fingerprints match the committed test/build inputs."
+    },
+    "orchard_release_selected_bundle": {
+      "result": "passed",
+      "date": "2026-11-05",
+      "test": "TestLive",
+      "api_commit": "401f11e595a82ac6bba64261c45d057e8b7f8bc3",
+      "seconds": 853.75,
+      "template_preparation_seconds": 650.754,
+      "two_clone_handoff_and_exit_seconds": 20.15,
+      "jobdb_service_startup_seconds": 8,
+      "base": "macos-26-arm64",
+      "guest": {
+        "platform": "darwin/arm64",
+        "macos": "26.6.2",
+        "build": "25G83",
+        "image": "ghcr.io/cirruslabs/macos-tahoe-base@sha256:4aaa751fa7538902d73c767f27a066fc87e83f183069da4e4b5022863abd4c77"
+      },
+      "report": "test-results/20261105T033848Z-orchard-5564/summary.json",
+      "checks": [
+        "two independent suspended templates",
+        "two concurrent clones",
+        "invalid-lease handoff and shutdown",
+        "library reopen during startup",
+        "duplicate suppression",
+        "overflow no_capacity",
+        "slot reuse",
+        "exact-identity cleanup",
+        "expected c2j failure marker verified",
+        "byte-preserving lease envelope",
+        "real JobDB completion through public Submit",
+        "Nix hello execution",
+        "lease-bound synthetic secret retrieval",
+        "renewal beyond initial lease lifetime",
+        "completed lease rejection without reacquisition",
+        "expired lease rejection without execution or reacquisition",
+        "concrete execution base satisfies recipe wildcard",
+        "current exported JobDB v2 lease"
+      ],
+      "jobdb": {
+        "claims": 1,
+        "output_ok": true,
+        "renewals": 5,
+        "secret_calls": 1,
+        "status": "COMPLETED"
+      },
+      "cleanup": "All test VM API records removed; Orchard inventory verified empty.",
+      "c2j_commit": "dc36b1bdf6c9e0c379b013943ab832d329ec7b45",
+      "lease_format_version": 2,
+      "required_base": "macos-*arm64",
+      "c2j_release": "v0.0.118",
+      "selection": "latest at bundle-build time",
+      "intervention": "One template remained unreachable over SSH for several minutes. Its exact journal-matched VM was manually deleted during setup; reconciliation created a fresh replacement. All lifecycle and JobDB assertions then passed."
+    },
+    "bundle_selection": {
+      "deterministic": "Passed release lookup, explicit tag/commit, missing/invalid version errors, environment fingerprint changes, image override parity, and embedded bundle parity; Go race suite, vet, build, macOS ARM64 cross-build.",
+      "macos": "The shared selector resolved an explicit v0.0.118 inside the macOS fixture VM and reproduced the original bundle fingerprint. Latest resolution also found v0.0.119, which was published during the run.",
+      "generated_archive": "dist/guest-bundle.tar.gz",
+      "generated_release": "v0.0.119",
+      "generated_commit": "472f2b4669e438cf260e7ee32c3df7a068042397",
+      "limitation": "The VM execution run used v0.0.118. v0.0.119 bundle generation and release resolution were verified, but its execution was not tested."
+    },
+    "orchard_named_images": {
+      "result": "passed",
+      "date": "2026-11-05",
+      "test": "TestLive",
+      "seconds": 413.18,
+      "template_preparation_seconds": 217.294,
+      "two_clone_handoff_and_exit_seconds": 20.129,
+      "jobdb_service_startup_seconds": 9,
+      "base": "macos-26-arm64",
+      "c2j_selection": "latest at preparation time; exact revision not captured in this run",
+      "report": "test-results/20261105T193428Z-orchard-18525/summary.json",
+      "checks": [
+        "one shared stopped base and two suspended slots",
+        "parallel clones, overflow, reopen, replay, slot reuse",
+        "installed worker without per-job setup transfer",
+        "JobDB v2 execution, concrete base, Nix hello, secret retrieval and renewal",
+        "completed and expired lease rejection",
+        "drain followed by explicit source purge"
+      ],
+      "cleanup": "Passed; Orchard API inventory subsequently verified empty."
+    },
+    "named_image_updates": {
+      "deterministic": "Go/native replacement tests and mocked standalone updater cover running-clone preservation, fresh MACs, stable aliases, preparation failure and ensure mode.",
+      "macos": "Pending: run scripts/test-macos.sh on the Apple Silicon host. The suite now requires IMAGE_UPDATE_PASS in addition to every JobDB assertion.",
+      "orchard_worker_local_publication": "Alias discovery covered deterministically; replacing native images beneath live Orchard records has not yet been tested on a worker."
     }
   },
   "historical_measurements": {
@@ -435,7 +523,7 @@
   "tart": {
     "reviewed_source": "https://github.com/openai/tart",
     "reviewed_commit": "bcc8084a22b1ab1cc7162626537d1c6cd794cdba",
-    "real_host_test": "Full race suite, Tahoe lifecycle, concrete execution base and real JobDB v2 lease execution passed on user macOS host, 2026-11-05"
+    "real_host_test": "Previous lifecycle/JobDB suite passed on 2026-11-05; new shared-base adoption and standalone update lifecycle need the new macOS suite."
   },
   "base_catalog": [
     {
@@ -452,5 +540,11 @@
       "build": "24G720",
       "image": "ghcr.io/cirruslabs/macos-sequoia-base@sha256:eee659985b01e4df2a6c0754bd8d25e54969933c43fdcd4edef8bea337b3d354"
     }
-  ]
+  ],
+  "bundle_selection": {
+    "library_default": "Config.C2JVersion defaults to latest; existing images are reused",
+    "script_default": "latest published c2j GitHub release",
+    "override": "--c2j TAG, COMMIT, or branch",
+    "resolution": "Resolve during missing-image preparation or explicit update; no job-time lookup, release manifest, or installed version sidecar."
+  }
 }

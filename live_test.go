@@ -14,7 +14,6 @@ import (
 
 	api "github.com/colony-2/pulse-provider-api"
 	"github.com/colony-2/pulse-tart/internal/backend"
-	"github.com/colony-2/pulse-tart/internal/bundle"
 	"github.com/colony-2/pulse-tart/internal/orchard"
 )
 
@@ -60,19 +59,23 @@ func TestLive(t *testing.T) {
 	base.SSHPassword = Secret(password)
 	c := Config{OwnerID: owner, StateDir: dir, Bases: []Base{base}, Slots: []SlotGroup{{Name: "standard", Count: 2, Base: base.Name}}}
 	t.Logf("testing base %s; guest macOS %s; image %s", base.Name, base.OSVersion, base.Image)
-	archive, e := bundle.Build(assets, "integration")
-	if e != nil {
-		t.Fatal(e)
-	}
-	c.GuestBundle = archive
+	c.C2JVersion = os.Getenv("PULSE_TEST_C2J_VERSION")
 	report := newLiveReport(t, password)
 	connect := OrchardConfig{URL: os.Getenv("PULSE_TEST_ORCHARD_URL"), Worker: os.Getenv("PULSE_TEST_ORCHARD_WORKER"), AllowInsecureHTTP: true}
 	factory := func() (*Runtime, error) {
 		switch kind {
 		case "orchard":
-			return NewOrchard(c, connect)
+			r, err := NewOrchard(c, connect)
+			if err == nil {
+				r.profile = "integration"
+			}
+			return r, err
 		case "tart":
-			return NewTart(c, TartConfig{Home: os.Getenv("PULSE_TEST_TART_HOME")})
+			r, err := NewTart(c, TartConfig{Home: os.Getenv("PULSE_TEST_TART_HOME")})
+			if err == nil {
+				r.profile = "integration"
+			}
+			return r, err
 		default:
 			return nil, fmt.Errorf("unknown test backend")
 		}
@@ -99,6 +102,10 @@ func TestLive(t *testing.T) {
 			slots, _ := r.Slots()
 			page, e := r.List(clean, api.ListRequest{})
 			if e == nil && len(slots) == 0 && len(page.Items) == 0 {
+				if err := r.PurgeImages(clean); err != nil {
+					t.Errorf("purge test images: %v", err)
+					return
+				}
 				_ = r.Close()
 				if !t.Failed() {
 					_ = os.RemoveAll(dir)
@@ -115,6 +122,15 @@ func TestLive(t *testing.T) {
 	waitLive(t, ctx, "prepared suspended slots", 30*time.Minute, func(ctx context.Context) bool {
 		if e := r.Reconcile(ctx); e != nil {
 			t.Fatal(e)
+		}
+		images, err := r.Images()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, image := range images {
+			if image.Phase == "failed" || image.Phase == "quarantine" {
+				t.Fatalf("prepared image %s entered %s", image.Name, image.Phase)
+			}
 		}
 		slots, e := r.Slots()
 		if e != nil {
@@ -239,6 +255,18 @@ func TestLive(t *testing.T) {
 	done([]api.Launch{again})
 	if e = r.Reconcile(ctx); e != nil {
 		t.Fatal(e)
+	}
+	if kind == "tart" {
+		exerciseImageUpdate(t, ctx, r, owner, dir, base, c.C2JVersion, report)
+		updated := launch("updated")
+		out, e = r.Submit(ctx, []api.Launch{updated})
+		if e != nil || out[0].Status != api.Accepted {
+			t.Fatal("updated source admission", out, e)
+		}
+		done([]api.Launch{updated})
+		if e = r.Reconcile(ctx); e != nil {
+			t.Fatal(e)
+		}
 	}
 	exerciseJobDB(t, ctx, kind, connect, r, owner, dir, report, done)
 	data, _ := os.ReadFile(filepath.Join(dir, "state.json"))

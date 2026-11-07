@@ -13,9 +13,11 @@ import (
 	"time"
 
 	api "github.com/colony-2/pulse-provider-api"
+	"github.com/colony-2/pulse-tart/internal/bundle"
 	"github.com/colony-2/pulse-tart/internal/config"
 	"github.com/colony-2/pulse-tart/internal/orchard"
 	engine "github.com/colony-2/pulse-tart/internal/provider"
+	"github.com/colony-2/pulse-tart/internal/releases"
 	local "github.com/colony-2/pulse-tart/internal/tart"
 )
 
@@ -26,6 +28,7 @@ type OrchardConfig = config.Orchard
 type TartConfig = config.Tart
 type Secret = config.Secret
 type SlotStatus = engine.SlotStatus
+type ImageStatus = engine.ImageStatus
 
 const DefaultCPU = config.DefaultCPU
 const DefaultMemoryMiB = config.DefaultMemoryMiB
@@ -41,10 +44,11 @@ var _ api.Provider = (*Runtime)(nil)
 // the same state directory recovers the journal. Never share a directory across
 // backends, owners, or simultaneously running hosts.
 type Runtime struct {
-	mu     sync.RWMutex
-	p      *engine.Provider
-	closed bool
-	period time.Duration
+	mu      sync.RWMutex
+	p       *engine.Provider
+	closed  bool
+	period  time.Duration
+	profile string
 }
 
 func prepare(c Config) (Config, error) {
@@ -52,10 +56,25 @@ func prepare(c Config) (Config, error) {
 	if e != nil {
 		return c, e
 	}
-	if len(c.GuestBundle) == 0 {
-		c.GuestBundle, e = GuestBundle()
-	}
 	return c, e
+}
+
+func newRuntime(p *engine.Provider, c Config) *Runtime {
+	r := &Runtime{p: p, period: c.PollInterval, profile: "default"}
+	p.BaseScript, _ = assets.ReadFile("scripts/prepare-base.sh")
+	var setup []byte
+	p.Setup = func(ctx context.Context) ([]byte, error) {
+		if setup != nil {
+			return setup, nil
+		}
+		revision, err := releases.Resolve(ctx, c.C2JVersion)
+		if err != nil {
+			return nil, err
+		}
+		setup, err = bundle.Build(assets, r.profile, revision)
+		return setup, err
+	}
+	return r
 }
 func NewOrchard(c Config, connection OrchardConfig) (*Runtime, error) {
 	c, e := prepare(c)
@@ -76,7 +95,7 @@ func NewOrchard(c Config, connection OrchardConfig) (*Runtime, error) {
 	if e != nil {
 		return nil, e
 	}
-	return &Runtime{p: p, period: c.PollInterval}, nil
+	return newRuntime(p, c), nil
 }
 func NewTart(c Config, options TartConfig) (*Runtime, error) {
 	c, e := prepare(c)
@@ -104,7 +123,7 @@ func NewTart(c Config, options TartConfig) (*Runtime, error) {
 		store.Close()
 		return nil, e
 	}
-	return &Runtime{p: engine.Attach(settings, b, store), period: c.PollInterval}, nil
+	return newRuntime(engine.Attach(settings, b, store), c), nil
 }
 func (r *Runtime) Submit(ctx context.Context, launches []api.Launch) ([]api.Submission, error) {
 	r.mu.RLock()
@@ -160,6 +179,15 @@ func (r *Runtime) Slots() ([]SlotStatus, error) {
 	}
 	return r.p.Slots()
 }
+
+func (r *Runtime) Images() ([]ImageStatus, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.closed {
+		return nil, ErrClosed
+	}
+	return r.p.Images()
+}
 func (r *Runtime) Reconcile(ctx context.Context) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -192,7 +220,8 @@ func (r *Runtime) Run(ctx context.Context) error {
 	}
 }
 
-// Drain disables new admissions and retires templates as their jobs finish.
+// Drain disables new admissions and retires slot reservations as jobs finish.
+// Published images remain available for reuse or explicit PurgeImages.
 // Call Reconcile until Slots is empty. It does not cancel active work.
 func (r *Runtime) Drain(ctx context.Context) error {
 	r.mu.Lock()
@@ -216,4 +245,15 @@ func (r *Runtime) Close() error {
 		_ = b.Close()
 	}
 	return r.p.Close()
+}
+
+// PurgeImages removes this journal's inactive prepared sources after Drain.
+// Normal reconciliation, Close, and Drain leave published images available.
+func (r *Runtime) PurgeImages(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return ErrClosed
+	}
+	return r.p.PurgeImages(ctx)
 }

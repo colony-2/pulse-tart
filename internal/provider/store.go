@@ -31,11 +31,12 @@ type Record struct {
 	SlotID      string         `json:"slot_id,omitempty"`
 }
 type state struct {
-	Version int                    `json:"version"`
-	Scope   string                 `json:"scope"`
-	Key     []byte                 `json:"key"`
-	Records map[string]*Record     `json:"records"`
-	Slots   map[string]*SlotRecord `json:"slots,omitempty"`
+	Version int                     `json:"version"`
+	Scope   string                  `json:"scope"`
+	Key     []byte                  `json:"key"`
+	Records map[string]*Record      `json:"records"`
+	Slots   map[string]*SlotRecord  `json:"slots,omitempty"`
+	Images  map[string]*ImageRecord `json:"images,omitempty"`
 }
 type Store struct {
 	mu     ctxlock.Mutex
@@ -88,6 +89,15 @@ func OpenStore(dir, scope string) (*Store, error) {
 	}
 	if s.data.Slots == nil {
 		s.data.Slots = map[string]*SlotRecord{}
+	}
+	if s.data.Images == nil {
+		s.data.Images = map[string]*ImageRecord{}
+	}
+	for name, image := range s.data.Images {
+		if image == nil || name != image.Name || image.NativeHash == "" || image.Worker == "" || !validSlotPhase(image.Phase) {
+			s.Close()
+			return nil, ErrState
+		}
 	}
 	for id, r := range s.data.Slots {
 		if r == nil || id != r.ID || r.Name == "" || r.NativeHash == "" || r.ConfigHash == "" || !validSlotPhase(r.Phase) || !validSlotIdentity(r) {

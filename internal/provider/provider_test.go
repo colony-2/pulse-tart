@@ -21,6 +21,7 @@ import (
 
 type fake struct {
 	mu               sync.Mutex
+	baseVM           *backend.VM
 	vms              map[string]backend.VM
 	creates, deletes int
 	lose, readFail   bool
@@ -53,6 +54,9 @@ func (f *fake) Create(_ context.Context, s backend.Spec) (backend.VM, error) {
 func (f *fake) Get(_ context.Context, n string) (backend.VM, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.baseVM != nil && n == f.baseVM.Name {
+		return *f.baseVM, nil
+	}
 	v, ok := f.vms[n]
 	if !ok {
 		return v, &backend.Error{Code: 404}
@@ -63,6 +67,9 @@ func (f *fake) Delete(_ context.Context, n string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.deletes++
+	if f.baseVM != nil && f.baseVM.Name == n {
+		f.baseVM = nil
+	}
 	delete(f.vms, n)
 	return nil
 }
@@ -70,7 +77,7 @@ func fixture(t *testing.T) (*Provider, *fake) {
 	t.Helper()
 	dir := t.TempDir()
 	_ = os.Chmod(dir, 0700)
-	c, e := config.Normalize(config.Config{OwnerID: "test", StateDir: dir, GuestBundle: []byte("test-bundle"), Bases: []config.Base{{Name: "macos-sequoia-15.7.7-arm64", Image: "example.test/macos@sha256:" + strings.Repeat("a", 64), OSVersion: "15.7.7", SSHPassword: "admin", Capabilities: []string{"nix", "git"}}}, Slots: []config.SlotGroup{{Name: "small", Count: 2, Base: "macos-sequoia-15.7.7-arm64"}}})
+	c, e := config.Normalize(config.Config{OwnerID: "test", StateDir: dir, Bases: []config.Base{{Name: "macos-sequoia-15.7.7-arm64", Image: "example.test/macos@sha256:" + strings.Repeat("a", 64), OSVersion: "15.7.7", SSHPassword: "admin", Capabilities: []string{"nix", "git"}}}, Slots: []config.SlotGroup{{Name: "small", Count: 2, Base: "macos-sequoia-15.7.7-arm64"}}})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -79,6 +86,12 @@ func fixture(t *testing.T) (*Provider, *fake) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	p.Setup = func(context.Context) ([]byte, error) { return []byte("test-setup"), nil }
+	base := p.sourceSpec(p.Config.Bases[0], 4, 8192)
+	base.Name = config.BaseImageName(p.Config.OwnerID, p.Config.Bases[0].Name)
+	f.baseVM = &backend.VM{Spec: base, UID: "prepared-base", LocalName: "local-" + base.Name, Worker: "mac-1", PowerState: "stopped", Conditions: []backend.Condition{{Type: "running", State: "false"}}}
+	p.Store.data.Images[base.Name] = &ImageRecord{Name: base.Name, UID: f.baseVM.UID, LocalName: f.baseVM.LocalName, NativeHash: p.Store.hash(base), Phase: "ready", Worker: "mac-1", Kind: "base"}
+
 	t.Cleanup(func() { p.Close() })
 	return p, f
 }

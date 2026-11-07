@@ -182,3 +182,7 @@ func (c *Client) Events(ctx context.Context, name string) ([]Event, error) {
 }
 
 func (c *Client) Close() error { c.HTTP.CloseIdleConnections(); return nil }
+
+// Worker-local Tart sources are not listed by the controller. A disposable
+// clone probes their presence before falling back to initial preparation.
+func (c *Client) ProbeLocalSources() bool { return true }

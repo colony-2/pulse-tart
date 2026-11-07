@@ -11,7 +11,7 @@ MARKERS = ("JOBDB_VALID_PASS:", "JOBDB_REPLAY_PASS:", "JOBDB_EXPIRED_PASS:")
 
 
 def source_files(root):
-    files = list(root.glob("*.go")) + [root / p for p in ("go.mod", "go.sum", "flake.nix", "flake.lock")]
+    files = list(root.glob("*.go")) + [root / p for p in ("go.mod", "go.sum", "flake.nix", "flake.lock", "bases.json")]
     for directory in ("internal", "guest", "scripts", "tests"):
         files.extend(p for p in (root / directory).rglob("*")
                      if p.is_file() and "__pycache__" not in p.parts)
@@ -41,14 +41,15 @@ def snapshot(root, destination):
 
 
 def summarize(events, backend, exit_code):
+    markers = MARKERS + (("IMAGE_UPDATE_PASS:",) if backend == "tart" else ())
     live_passed = False
-    checks = {marker.removesuffix(":"): False for marker in MARKERS}
+    checks = {marker.removesuffix(":"): False for marker in markers}
     failures, skipped, packages = [], [], {}
     for event in events:
         package, test, action = event.get("Package"), event.get("Test"), event.get("Action")
         if package == ROOT_PACKAGE and test == "TestLive":
             live_passed |= action == "pass"
-            for marker in MARKERS:
+            for marker in markers:
                 checks[marker.removesuffix(":")] |= marker in event.get("Output", "")
         if action == "fail":
             failures.append({"package": package, "test": test})
@@ -59,7 +60,8 @@ def summarize(events, backend, exit_code):
     passed = exit_code == 0 and live_passed and all(checks.values()) and not failures
     return {"result": "passed" if passed else "failed", "backend": backend,
             "command_exit_code": exit_code, "live_test_passed": live_passed,
-            "jobdb_checks": checks, "failures": failures, "skipped_tests": skipped,
+            "jobdb_checks": {k:v for k,v in checks.items() if k.startswith("JOBDB_")},
+            "image_update_passed": checks.get("IMAGE_UPDATE_PASS"), "failures": failures, "skipped_tests": skipped,
             "packages": packages}
 
 
@@ -82,7 +84,7 @@ def main():
         (path / "summary.json").write_text(json.dumps(result, indent=2) + "\n")
         print("Full suite and JobDB:", result["result"])
         if result["result"] != "passed":
-            print("Required live execution, completion, renewal, secret, replay, or expiry checks did not all pass.")
+            print("Required live execution, completion, renewal, secret, replay, expiry, or native image update checks did not all pass.")
         return 0 if result["result"] == "passed" else 1
     else:
         raise ValueError("unknown report mode")

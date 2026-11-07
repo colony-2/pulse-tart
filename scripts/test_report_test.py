@@ -15,7 +15,7 @@ class SourceSnapshot(unittest.TestCase):
     def test_snapshot_survives_edits_and_excludes_private_state(self):
         with TemporaryDirectory() as temp:
             root = Path(temp)
-            for name in ("assets.go", "go.mod", "go.sum", "flake.nix", "flake.lock",
+            for name in ("assets.go", "go.mod", "go.sum", "flake.nix", "flake.lock", "bases.json",
                          "guest/main.go", "scripts/bootstrap-guest.sh", "internal/provider/launch.go",
                          "tests/integration/c2j-fixture.go.txt"):
                 path = root / name
@@ -36,10 +36,10 @@ class SourceSnapshot(unittest.TestCase):
             self.assertEqual(copied.read_text(), "original scripts/bootstrap-guest.sh")
             self.assertEqual(copied.stat().st_mode & 0o777, 0o755)
             fingerprints = json.loads((destination / "source-sha256.json").read_text())
-            self.assertEqual(len(fingerprints), 9)
+            self.assertEqual(len(fingerprints), 10)
             for name, digest in fingerprints.items():
                 self.assertEqual(hashlib.sha256((destination / "source" / name).read_bytes()).hexdigest(), digest)
-            self.assertEqual(len(list(p for p in (destination / "source").rglob("*") if p.is_file())), 9)
+            self.assertEqual(len(list(p for p in (destination / "source").rglob("*") if p.is_file())), 10)
 
     def test_changes_during_capture_fail_before_testing(self):
         with TemporaryDirectory() as temp, patch.object(report, "capture_source", side_effect=[{}, {"changed": (b"", 0)}]):
@@ -51,10 +51,15 @@ class SourceSnapshot(unittest.TestCase):
 class ReportContract(unittest.TestCase):
     def events(self):
         return [dict(Package=report.ROOT_PACKAGE, Test="TestLive", Action="output", Output=m)
-                for m in report.MARKERS] + [dict(Package=report.ROOT_PACKAGE, Test="TestLive", Action="pass")]
+                for m in report.MARKERS + ("IMAGE_UPDATE_PASS:",)] + [dict(Package=report.ROOT_PACKAGE, Test="TestLive", Action="pass")]
 
     def test_complete_execution_passes(self):
         self.assertEqual(report.summarize(self.events(), "tart", 0)["result"], "passed")
+
+    def test_image_update_required_only_for_tart(self):
+        events = [e for e in self.events() if e.get("Output") != "IMAGE_UPDATE_PASS:"]
+        self.assertEqual(report.summarize(events, "tart", 0)["result"], "failed")
+        self.assertEqual(report.summarize(events, "orchard", 0)["result"], "passed")
 
     def test_missing_jobdb_assertion_fails(self):
         for index in range(len(report.MARKERS)):

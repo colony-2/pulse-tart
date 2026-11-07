@@ -18,6 +18,12 @@ func TestReportRequiresCompleteJobDBCoverage(t *testing.T) {
 		t.Fatalf("report contract: %v\n%s", e, out)
 	}
 }
+func TestBundleVersionSelection(t *testing.T) {
+	cmd := exec.CommandContext(t.Context(), "python3", "-B", "scripts/test_bundle_test.py")
+	if out, e := cmd.CombinedOutput(); e != nil {
+		t.Fatalf("bundle selection: %v\n%s", e, out)
+	}
+}
 func TestDiagnosticRedactionPreservesJSON(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("PULSE_TEST_OUTPUT_DIR", dir)
@@ -40,5 +46,12 @@ func TestDiagnosticRedactionPreservesJSON(t *testing.T) {
 	}
 	if got["count"] != float64(3) {
 		t.Fatal("diagnostic values changed")
+	}
+}
+
+func TestStandaloneImageUpdater(t *testing.T) {
+	cmd := exec.CommandContext(t.Context(), "python3", "-B", "scripts/test_update_images_test.py")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("image updater: %v\n%s", err, out)
 	}
 }

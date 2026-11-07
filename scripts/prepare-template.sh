@@ -3,10 +3,10 @@
 set -euo pipefail
 set +x
 umask 077
-bundle=$1
-seconds=$2
-expected_os=$3
-capabilities=${4:-}
+seconds=$1
+expected_os=$2
+capabilities=${3:-}
+script=/opt/pulse-tart-image/prepare-template.sh
 [[ $expected_os =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]
 [[ $(uname -s) == Darwin && $(uname -m) == arm64 && $EUID == 0 ]]
 [[ $seconds =~ ^[0-9]+$ && $seconds -ge 60 && $seconds -le 7200 ]]
@@ -14,12 +14,11 @@ state=/var/db/pulse-tart-template
 mkdir -p "$state"
 chmod 700 "$state"
 if [[ ${PULSE_TEMPLATE_SERVICE:-0} != 1 ]]; then
-  if [[ ! -d $state/bundle ]]; then cp -R "$bundle" "$state/bundle"; fi
   cat > /Library/LaunchDaemons/dev.pulse-tart.template.plist <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>
 <key>Label</key><string>dev.pulse-tart.template</string>
-<key>ProgramArguments</key><array><string>/bin/bash</string><string>$state/bundle/prepare-template.sh</string><string>$state/bundle</string><string>$seconds</string><string>$expected_os</string><string>$capabilities</string></array>
+<key>ProgramArguments</key><array><string>/bin/bash</string><string>$script</string><string>$seconds</string><string>$expected_os</string><string>$capabilities</string></array>
 <key>EnvironmentVariables</key><dict><key>PULSE_TEMPLATE_SERVICE</key><string>1</string><key>HOME</key><string>/var/root</string></dict>
 <key>RunAtLoad</key><true/><key>StandardOutPath</key><string>/var/log/pulse-tart-template.log</string><key>StandardErrorPath</key><string>/var/log/pulse-tart-template.log</string>
 </dict></plist>
@@ -46,7 +45,8 @@ guard=$!
 trap 'kill "$guard" 2>/dev/null || true' EXIT
 trap 'touch "$state/failed"; sleep 10; /sbin/shutdown -h now' ERR
 [[ $(/usr/bin/sw_vers -productVersion) == "$expected_os" ]]
-/bin/bash "$bundle/prepare-image.sh" "$bundle"
+/opt/pulse-tart/bin/c2j version
+/opt/pulse-tart/bin/pulse-tart-guest version
 for capability in $capabilities; do
   case "$capability" in
     nix) /nix/var/nix/profiles/default/bin/nix --version >/dev/null ;;
