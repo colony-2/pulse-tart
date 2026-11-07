@@ -52,7 +52,7 @@ ForceCommand /bin/false
     h.guest(engine, 'sudo /usr/sbin/sshd -t -f /opt/pulse-docker/endpoint-sshd.conf; sudo /usr/sbin/sshd -f /opt/pulse-docker/endpoint-sshd.conf')
     h.report['transport_fingerprints'] = {
         'host_key_sha256':hashlib.sha256(h.guest(engine, 'cat /opt/pulse-docker/endpoint-host-key.pub')).hexdigest(),
-        'client_key_sha256':hashlib.sha256(h.guest(engine, 'cat /home/pulseengine/.ssh/authorized_keys')).hexdigest(),
+        'client_key_sha256':hashlib.sha256(h.guest(engine, 'sudo cat /home/pulseengine/.ssh/authorized_keys')).hexdigest(),
     }
     if h.a.backend == 'tart':
         ip = h.guest(engine, "hostname -I | awk '{print $1}'").decode().strip()

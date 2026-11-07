@@ -239,7 +239,9 @@ helpers enabled and copy APIs; no blanket Testcontainers compatibility claim.
 ## Next experiments and stopping criteria
 
 Run `./scripts/test-macos-docker-matrix.py` on the worker with capacity for four
-VMs. It is prepared but not executed here. A pass establishes the native endpoint
+VMs. Its first native run resumed both first-generation macOS clones, then failed
+before endpoint/job qualification on a protected public-key read. That harness
+permission bug is fixed; a rerun is required. A pass establishes the native endpoint
 path and two independently named/MAC-addressed suspended templates, two jobs per
 slot, distinct engine/key identities and overlapping job intervals. It is not a
 substitute for the production allocator failure tests.

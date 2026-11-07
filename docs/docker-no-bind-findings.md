@@ -137,7 +137,27 @@ excluded from aggregate evidence; the revised harness leaves skipped cases unrun
 No production allocator, entire controller/worker-crash matrix, pressure guarantee
 or blanket SDK compatibility is inferred from the supplementary pass.
 
-## Recorded versions
+## First native suspended matrix attempt
+
+`20261107T014911Z-docker-matrix-87479` stopped before either c2j job started.
+Both slots prepared and suspended distinct macOS templates, then resumed their
+first clones with matching boot IDs/MACs and no prior allocation marker/key.
+Resume-to-SSH samples were 16.05 s and 12.98 s. The two templates had distinct
+MACs. Both Linux engines prepared successfully.
+
+Both slots then failed the same harness fingerprint read:
+`cat /home/pulseengine/.ssh/authorized_keys: Permission denied`. Native guest
+management connects as the image admin, which cannot traverse the service
+account's private SSH directory. Use `sudo cat` for that public-key fingerprint;
+retain the directory/key permissions. The endpoint regression fixture now models
+this access restriction. The matrix also prints each child's command-failure log.
+
+The archives record cleanup of both templates and all four allocation VMs, with
+no cleanup errors. This is partial resume evidence only: guest endpoint access,
+jobs, second generations and the full concurrent matrix remain unqualified.
+The run used Tart 2.41.1, host macOS 26.7.2, and c2j v0.0.123.
+
+## Orchard qualification versions
 
 The qualifying runs used c2j v0.0.122 (`483cb48a328ea58fe8c231b8a4e3a1c11bf39422`),
 Engine 29.1.3 (API 1.52, minimum 1.44), Darwin CLI 28.5.1, Buildx 0.30.1,

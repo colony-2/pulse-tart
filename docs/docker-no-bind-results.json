@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "date": "2026-11-06",
+  "date": "2026-11-07",
   "contract": "Docker without job-path bind mounts",
   "production_ready": false,
   "design": "native primary workspace, private Engine, worker endpoint carrying allocation SSH",
@@ -792,5 +792,104 @@
     "docker_python_sdk": "7.1.0",
     "controller_version": "unknown",
     "controller_commit": "unknown"
-  }
+  },
+  "native_matrix_attempts": [
+    {
+      "evidence": "20261107T014911Z-docker-matrix-87479",
+      "result": "incomplete",
+      "children": [
+        {
+          "owner": "pulse-docker-ad6bcf1decae",
+          "result": "incomplete",
+          "build": {
+            "c2j_selection": "v0.0.123",
+            "c2j_commit": "5cd1a6484ac55cdd48d9afa64cd4dc528d2eecf4"
+          },
+          "template": {
+            "name": "pulse-docker-ad6bcf1decae-template",
+            "boot_id": "EE2ABC36-D3F5-4EC2-819C-BFCD8D203A0A",
+            "mac": "22:f1:ea:2c:50:fe"
+          },
+          "samples": [
+            {
+              "vm": "pulse-docker-ad6bcf1decae-template",
+              "cold_ssh_seconds": 19.78016895795008,
+              "cold_prepare_seconds": 36.8557785829762
+            },
+            {
+              "vm": "pulse-docker-ad6bcf1decae-g0-engine",
+              "cold_prepare_seconds": 35.43288866704097
+            },
+            {
+              "vm": "pulse-docker-ad6bcf1decae-g0-mac",
+              "resume_ssh_seconds": 16.0492170000216,
+              "boot_and_mac_preserved": true,
+              "previous_allocation_files_absent": true
+            },
+            {
+              "vm": "pulse-docker-ad6bcf1decae-g0-mac",
+              "cleanup_seconds": 0.2515894580283202
+            },
+            {
+              "vm": "pulse-docker-ad6bcf1decae-g0-engine",
+              "cleanup_seconds": 0.19173566700192168
+            },
+            {
+              "vm": "pulse-docker-ad6bcf1decae-template",
+              "cleanup_seconds": 0.17044454196002334
+            }
+          ],
+          "run_error": "Command failed; see command-failure-ced3dd2d.log"
+        },
+        {
+          "owner": "pulse-docker-6ed4ca3d108b",
+          "result": "incomplete",
+          "build": {
+            "c2j_selection": "v0.0.123",
+            "c2j_commit": "5cd1a6484ac55cdd48d9afa64cd4dc528d2eecf4"
+          },
+          "template": {
+            "name": "pulse-docker-6ed4ca3d108b-template",
+            "boot_id": "33E0A755-2BF8-41ED-A7A8-0669E55FEB95",
+            "mac": "56:55:08:62:37:66"
+          },
+          "samples": [
+            {
+              "vm": "pulse-docker-6ed4ca3d108b-template",
+              "cold_ssh_seconds": 20.839594000019133,
+              "cold_prepare_seconds": 34.10099700000137
+            },
+            {
+              "vm": "pulse-docker-6ed4ca3d108b-g0-engine",
+              "cold_prepare_seconds": 35.617665167024825
+            },
+            {
+              "vm": "pulse-docker-6ed4ca3d108b-g0-mac",
+              "resume_ssh_seconds": 12.97559225000441,
+              "boot_and_mac_preserved": true,
+              "previous_allocation_files_absent": true
+            },
+            {
+              "vm": "pulse-docker-6ed4ca3d108b-g0-mac",
+              "cleanup_seconds": 0.3688213749555871
+            },
+            {
+              "vm": "pulse-docker-6ed4ca3d108b-g0-engine",
+              "cleanup_seconds": 0.1835071659879759
+            },
+            {
+              "vm": "pulse-docker-6ed4ca3d108b-template",
+              "cleanup_seconds": 0.15664775000186637
+            }
+          ],
+          "run_error": "Command failed; see command-failure-e72660af.log"
+        }
+      ],
+      "cause": "Public-key fingerprint read lacked sudo for service account private SSH directory.",
+      "c2j_jobs": "not_run; failure occurred before submission despite child case label failed",
+      "cleanup_errors": [],
+      "full_concurrency_and_second_generation": "not_run",
+      "fix": "Use sudo for the public-key read, preserve existing permissions; awaiting native rerun."
+    }
+  ]
 }

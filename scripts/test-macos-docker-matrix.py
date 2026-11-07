@@ -25,7 +25,7 @@ OUT.mkdir(parents=True)
 shutil.copy2(__file__, OUT/"matrix-source.py")
 children = []
 report = {'scope':'native-two-suspended-slots','result':'incomplete','production_ready':False,'children':[]}
-print('Starting two independent suspended slots; up to four VMs / 16 vCPUs / 32 GiB. Full SDK checks run in each generation.',flush=True)
+print('Starting two independent suspended slots; at most two running macOS VMs plus two Linux VMs / 16 vCPUs / 32 GiB. Full SDK checks run in each generation.',flush=True)
 try:
     env = dict(os.environ)
     if env.get('PULSE_TEST_C2J_VERSION','latest') == 'latest':
@@ -51,7 +51,16 @@ try:
             raise RuntimeError('Child did not produce a report; inspect '+path.name)
         child_path=ROOT/matches[-1][0]
         data=json.loads(child_path.read_text())
-        report['children'].append({'path':matches[-1][0],'exit':p.returncode,'result':data['result']})
+        child = {'path':matches[-1][0],'exit':p.returncode,'result':data['result']}
+        if data.get('run_error'):
+            child['error'] = data['run_error']
+            print('Slot',len(report['children']),'failed:',data['run_error'],flush=True)
+            failure = re.search(r'command-failure-[a-f0-9]+\.log',data['run_error'])
+            if failure:
+                failure_path = child_path.parent/failure.group(0)
+                if failure_path.is_file():
+                    print(failure_path.read_text(errors='replace')[-4000:],flush=True)
+        report['children'].append(child)
         archive=child_path.parent.with_suffix('.tar.gz')
         if archive.exists():shutil.copy2(archive,OUT/archive.name)
         reports.append(data)

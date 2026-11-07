@@ -16,7 +16,13 @@ class EndpointTest(unittest.TestCase):
         uploaded = {}
         observed = {'observedEndpoints':[{'name':'engine-ssh','state':'listening','workerPort':45000,'protocol':'tcp'}]}
         native = Mock(side_effect=[{}, observed])
-        guest = Mock(return_value=b'pinned-server-key')
+        def guest_command(_, command):
+            # Native Tart connects as the image admin, not the service user.
+            # Its 0700 .ssh directory must stay private during fingerprinting.
+            if '/home/pulseengine/.ssh/authorized_keys' in command and not command.startswith('sudo '):
+                raise PermissionError('service account key is not admin-readable')
+            return b'pinned-server-key'
+        guest = Mock(side_effect=guest_command)
         api = Mock()
         env = dict(a=SimpleNamespace(backend="orchard"), guest=guest, upload=lambda _,p,b: uploaded.update({p:b}),
                    native=native, api=api, wait=lambda _,f,seconds: f(),
