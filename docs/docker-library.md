@@ -54,7 +54,8 @@ owner on each worker. The
 endpoint forwards only to allocation-key SSH on engine port 2222. It never
 publishes Docker HTTP or container services on the physical host. Orchard must
 support VM endpoints with a single-port `workerPortRange`. Local Tart installs
-an allocation-owned launchd service in the worker user's domain, using
+an allocation-owned launchd service with `LimitLoadToSessionType=Background`
+in the worker user's domain, using
 `/usr/bin/python3` (override `TartConfig.PythonBinary` if needed). Its script,
 plist and logs live under the private state directory. The service and VMs
 survive `Runtime.Close`; run reconciliation again to recover and clean them up.
@@ -132,21 +133,35 @@ Run the full deterministic suite plus real Linux and macOS Docker library jobs:
 
 Orchard mode requires `PULSE_TEST_ORCHARD_URL`, `PULSE_TEST_ORCHARD_WORKER` and
 `PULSE_TEST_ENGINE_WORKER_ADDRESS`. The script runs platforms sequentially,
-captures source/logs and prints a relative `test-results/...tar.gz` archive. Fresh
+captures source/logs and prints a relative `test-results/...tar.gz` archive. Native
+macOS testing first checks launchd bootstrap, forwarding, Close/reopen, same-port
+restart and removal without creating any VMs. A failed preflight stops the run;
+its logs and endpoint diagnostics are included in the archive. Fresh
 Nix image builds can take several minutes; each platform has a 45-minute limit.
 The fixture checks a real JobDB lease, Docker work, renewal, reopen/replay,
 resource listing and cleanup. The older native prototype matrix remains useful
 for SDK and simultaneous-slot qualification, but does not certify this allocator.
 
 The integrated Orchard runs passed on November 7, 2026 for both Ubuntu 24.04
-and macOS 26.7.2: one claim, ten renewals, one secret resolution, reopen/replay,
+and macOS 26.6.2: one claim, ten renewals, one secret resolution, reopen/replay,
 Docker work and complete resource cleanup per job. Each run also passed the Go
 race suite and 30 Python tests. See [recorded evidence](docker-library-results.json).
 The tested client/engine versions are 29.8.1/29.1.3, Buildx 0.31.1 and the Compose
 5.4.0 plugin; c2j v0.0.124 was selected for these tests. The library default still
 resolves the latest c2j release during preparation.
 
-Direct Tart's integrated path has not been run on a Mac in this environment.
+Direct Tart's Linux integration passed in native run
+`20261107T042440Z-docker-library-tart-85305`. That run's macOS case stopped at
+worker endpoint bootstrap, before primary creation or lease delivery. The
+Background session fix passed the real launchd supervisor test in a disposable
+macOS guest; the full native macOS allocation still needs a rerun:
+
+```sh
+./scripts/test-macos-docker-library.sh tart darwin
+```
+
+This retains the full Go/Python regression suites while selecting the macOS live
+case. Use the command without arguments to test both live platforms.
 Before broad production use, qualify that allocator and concurrent allocations,
 real controller/worker crash boundaries, private-disk/memory/CPU pressure and
 cross-allocation prune isolation. Deterministic recovery tests supplement these

@@ -48,13 +48,45 @@
         "buildx": "github.com/docker/buildx v0.31.1",
         "compose": "Docker Compose version 5.4.0"
       }
+    },
+    {
+      "backend": "tart",
+      "platform": "linux",
+      "result": "passed",
+      "combined_archive_result": "incomplete (macOS endpoint bootstrap failed before admission)",
+      "archive": "test-results/20261107T042440Z-docker-library-tart-85305.tar.gz",
+      "jobdb": {
+        "claims": 1,
+        "output_ok": true,
+        "renewals": 10,
+        "secret_calls": 1,
+        "status": "COMPLETED"
+      },
+      "allocation_vms": 1
     }
   ],
   "remaining_live_gates": [
-    "native Tart integrated allocator",
+    "native Tart macOS integrated allocator after endpoint fix",
     "native concurrent allocations",
     "controller/worker crash injection",
     "CPU/memory/private-disk pressure",
     "cross-allocation prune isolation"
+  ],
+  "component_checks": [
+    {
+      "component": "native worker launchd supervisor",
+      "result": "passed",
+      "environment": "disposable macOS 26.6.2 guest through Orchard",
+      "test": "TestLiveDockerEndpoint",
+      "duration_seconds": 2.21,
+      "checks": [
+        "Background session bootstrap",
+        "TCP forwarding",
+        "Close/reopen",
+        "same-port process restart",
+        "listener removal"
+      ],
+      "full_native_macos_allocation_tested": false
+    }
   ]
 }

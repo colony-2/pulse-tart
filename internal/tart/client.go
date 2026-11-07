@@ -59,6 +59,7 @@ type Client struct {
 	bases   []config.Base
 	timeout time.Duration
 	command command
+	service command // launchctl; injectable for lifecycle tests
 	launch  func(string) (int, error)
 	records map[string]*record
 	ctx     context.Context
@@ -118,7 +119,7 @@ func open(c config.Tart, common config.Config) (*Client, error) {
 			common.Bases = append(append([]config.Base{}, common.Bases...), config.Base{Image: p.Image, SSHHostKey: p.SSHHostKey})
 		}
 	}
-	b := &Client{cfg: c, dir: filepath.Join(common.StateDir, "native"), bases: common.Bases, timeout: common.BootstrapTimeout, records: map[string]*record{}, workers: map[string]bool{}, ctx: ctx, cancel: cancel}
+	b := &Client{service: service, cfg: c, dir: filepath.Join(common.StateDir, "native"), bases: common.Bases, timeout: common.BootstrapTimeout, records: map[string]*record{}, workers: map[string]bool{}, ctx: ctx, cancel: cancel}
 	fail := func() (*Client, error) { cancel(); return nil, Err }
 	if os.MkdirAll(b.dir, 0700) != nil {
 		return fail()

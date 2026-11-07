@@ -39,7 +39,18 @@ status=0
 # Include script/prototype regressions in the frozen snapshot as well.
 if ! python3 -m unittest discover -s scripts -p 'test_*test.py' > "$out/python.log" 2>&1; then status=2; fi
 if ! python3 -m unittest discover -s scripts/docker-prototype -p 'test*.py' >> "$out/python.log" 2>&1; then status=2; fi
+# Catch worker launchd/Python/port failures without preparing any VMs.
+if [[ $status == 0 && $backend == tart && $platform != linux ]]; then
+ printf 'Checking the native worker endpoint (no VMs; up to 90 seconds).\n'
+ set +e
+ PULSE_TEST_DOCKER_ENDPOINT=1 go test -race -json -count=1 -run '^TestLiveDockerEndpoint$' -timeout=90s ./internal/tart 2>&1 | tee "$out/endpoint-tests.jsonl" | python3 scripts/test-report.py stream "$out/endpoint.log"
+ codes=("${PIPESTATUS[@]}")
+ set -e
+ for code in "${codes[@]}"; do if [[ $code != 0 ]]; then status=2; fi; done
+ if ! grep -q 'DOCKER_ENDPOINT_SERVICE_PASS:' "$out/endpoint.log"; then status=2; fi
+fi
 for guest_os in "${guests[@]}"; do
+ if [[ $status != 0 ]]; then break; fi
  export PULSE_TEST_DOCKER_OS="$guest_os"
  printf 'Testing %s through the public library; fresh image preparation may take several minutes.\n' "$guest_os"
  set +e

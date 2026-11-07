@@ -240,6 +240,15 @@ func (r *liveReport) capture(t *testing.T, ctx context.Context, kind string, con
 	if r.dir == "" || runtime == nil {
 		return
 	}
+	if diagnostic, ok := runtime.p.Backend.(interface {
+		EndpointDiagnostics(context.Context) (map[string]map[string]string, error)
+	}); ok {
+		data, err := diagnostic.EndpointDiagnostics(ctx)
+		if err != nil {
+			t.Logf("endpoint diagnostics: %v", err)
+		}
+		r.write(t, fmt.Sprintf("endpoint-diagnostics-%d.json", time.Now().UnixNano()), data)
+	}
 	var journal struct {
 		Records map[string]struct{ Name, UID string } `json:"records"`
 		Slots   map[string]struct{ Name, UID string } `json:"slots"`
