@@ -1,10 +1,11 @@
 # Docker without bind mounts: experiment findings
 
-November 6, 2026. See the [implementation plan](docker-capability-plan.md) and
+Updated November 7, 2026. See the [implementation plan](docker-capability-plan.md) and
 [requirements](../pulse-tart-docker-capability-requirements.md). Production support
 is not enabled. These tests use the public Provider API through a prepared-VM
 experimental adapter; the production slot allocator/reaper remains implementation
-work. Every run used uniquely owned disposable VMs and external-controller Orchard.
+work. Every run used uniquely owned disposable VMs, through external-controller
+Orchard or the native Tart matrix identified below.
 
 ## Proven execution path
 
@@ -66,9 +67,8 @@ Orchard controller/worker crash or complete paired-allocation recovery.
 Fixed/dynamic IPv4 publications, immediate listener connection after start,
 loopback/wildcard engine publications, conflict handling, and Go Testcontainers
 with archive-copied fixtures and normal Ryuk passed. The native Tart equivalent
-is a detached worker TCP helper in the new Mac script. Its TCP binary transfer
-and half-close logic is locally tested, but native Mac reachability/supervision
-still requires a host run and production integration.
+is a detached worker TCP helper. Native Mac reachability passed the November 7
+matrix below; production helper supervision/recovery remains implementation work.
 
 ## Unsupported features are not universally rejected
 
@@ -106,10 +106,11 @@ an inaccessible cwd and reused paths; the third is the qualifying observation.
 
 ## Remaining production gates
 
-Native Tart end-to-end qualification; resumed macOS templates with fresh identities;
-two simultaneous macOS/Linux pairs and repeated generations; complete paired
-reservation/handoff/reaper failure matrix; primary minima and memory/CPU/disk
-pressure; endpoint recreation and local-helper supervision. The available Orchard
+Native Linux-primary c2j acceptance; Orchard suspended/concurrent pair qualification;
+complete paired reservation/handoff/reaper failure matrix; primary minima and
+memory/CPU/disk pressure; endpoint recreation and local-helper supervision;
+cross-allocation enumeration/prune and complete engine-state residue checks.
+The native macOS suspended/concurrent matrix passed below. The available Orchard
 worker advertises two VM units, so it cannot host the four VMs needed for the
 concurrent-pair case without an explicit capacity/configuration change.
 
@@ -154,8 +155,44 @@ this access restriction. The matrix also prints each child's command-failure log
 
 The archives record cleanup of both templates and all four allocation VMs, with
 no cleanup errors. This is partial resume evidence only: guest endpoint access,
-jobs, second generations and the full concurrent matrix remain unqualified.
+jobs, second generations and the full concurrent matrix were unqualified by that attempt.
 The run used Tart 2.41.1, host macOS 26.7.2, and c2j v0.0.123.
+
+## Native suspended/concurrent matrix passed
+
+`20261107T022409Z-docker-matrix-35171` passed both child scopes and independent
+aggregate checks. Each of two slots ran two sequential generations: four real
+macOS c2j jobs completed with exit 0, one claim, ten renewals and one synthetic
+secret fetch each. Both generations overlapped across slots: 165.95 s and
+167.94 s of observed nonterminal execution after renewal. At most two macOS
+VMs plus two Linux companions ran simultaneously.
+
+All four macOS clones preserved their slot template's boot ID/MAC and lacked
+the prior-allocation marker/key; the two template MACs differed. All four Engine
+IDs and both SSH key fingerprints per allocation were distinct. Identical
+container/Compose names and published ports worked concurrently. This establishes
+the measured identity and reuse checks, not exhaustive engine residue or
+cross-allocation prune isolation.
+
+The native worker bridge carried authenticated SSH even though direct guest
+routing was unavailable. Both rounds included builds, binary copy, Compose,
+registry authentication, Python SDK, Go/Java Testcontainers with Ryuk, TCP
+start/conflict checks, and relay/engine recovery probes. These exercise the
+prepared-pair adapter; no production allocator fault guarantees are inferred.
+
+| Measurement | Samples | Range |
+| --- | ---: | ---: |
+| macOS resumed clone to SSH | 4 | 10.12–14.91 s |
+| Linux engine clone + preparation | 4 | 35.39–38.44 s |
+| Real c2j job, including 135 s deliberate waits | 4 | 171.15–174.40 s |
+| Native VM stop/delete cleanup | 10 | 0.19–1.01 s |
+
+Resume-to-SSH is not complete pair readiness or handoff latency. Preparation
+still installs/uploads tools into cold Linux clones. Both templates and all
+eight allocation VMs were cleaned, with no reported cleanup errors. The host
+was an Apple M4 Max (16 cores, 128 GB), macOS 26.7.2; Tart 2.41.1; c2j v0.0.124
+(`33e2a4de4e99d3a577a38dca4b8de33d43a099ce`). This matrix selected macOS primaries;
+it does not count as a native Linux-primary c2j run.
 
 ## Orchard qualification versions
 

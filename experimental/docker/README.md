@@ -30,4 +30,5 @@ Focused success applies only to the report's explicit `required_cases`; full
 production readiness is still reported separately as `complete: false`.
 
 The [implementation plan](../../docs/docker-capability-plan.md) separates the
-selected design from remaining snapshot/concurrency/recovery/pressure gates.
+selected design, the passed native snapshot/concurrency matrix, and remaining
+Orchard scheduling/recovery/pressure gates.

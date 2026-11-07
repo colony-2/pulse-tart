@@ -748,15 +748,19 @@
     "no_bind_macos_java": {
       "evidence": "20261106T211953Z-docker-orchard-43781",
       "reason": "Java Testcontainers 2.0.5, copied fixture and TCP service, normal Ryuk enabled."
+    },
+    "native_macos_suspended_matrix": {
+      "evidence": "20261107T022409Z-docker-matrix-35171",
+      "reason": "Four completed real jobs, two generations per distinct suspended slot, overlapping execution in both generations, four unique engine/key identities, all ten VM records cleaned."
     }
   },
   "remaining_gates": [
-    "native Tart frontend",
-    "two suspended generations per slot",
-    "two simultaneous macOS/Linux pairs",
     "durable paired allocation/reaper faults",
     "CPU/memory/private-disk pressure",
-    "endpoint recreation and service supervision"
+    "endpoint recreation and service supervision",
+    "native Linux-primary c2j acceptance",
+    "Orchard suspended/concurrent pair scheduling",
+    "cross-allocation enumeration/prune and full engine-state residue checks"
   ],
   "unsupported_compose": {
     "host-volume": {
@@ -890,6 +894,397 @@
       "cleanup_errors": [],
       "full_concurrency_and_second_generation": "not_run",
       "fix": "Use sudo for the public-key read, preserve existing permissions; awaiting native rerun."
+    },
+    {
+      "evidence": "20261107T022409Z-docker-matrix-35171",
+      "result": "passed",
+      "matrix": {
+        "scope": "native-two-suspended-slots",
+        "result": "passed",
+        "production_ready": false,
+        "children": [
+          {
+            "path": "test-results/20261107T022409Z-docker-tart-35227/report.json",
+            "exit": 0,
+            "result": "passed"
+          },
+          {
+            "path": "test-results/20261107T022409Z-docker-tart-35228/report.json",
+            "exit": 0,
+            "result": "passed"
+          }
+        ],
+        "c2j_selection": "v0.0.124",
+        "overlap_seconds": 167.93767881393433,
+        "distinct_engine_ids": 4,
+        "distinct_template_macs": 2,
+        "distinct_key_pairs": 4
+      },
+      "children": [
+        {
+          "evidence": "20261107T022409Z-docker-tart-35227",
+          "result": "passed",
+          "build": {
+            "c2j_selection": "v0.0.124",
+            "c2j_commit": "33e2a4de4e99d3a577a38dca4b8de33d43a099ce"
+          },
+          "template": {
+            "name": "pulse-docker-dd48d3114578-template",
+            "boot_id": "8E36F201-9282-410F-B730-4AE9F1154EF0",
+            "mac": "96:a7:8c:82:c6:d7"
+          },
+          "samples": [
+            {
+              "vm": "pulse-docker-dd48d3114578-template",
+              "cold_ssh_seconds": 16.579370915947948,
+              "cold_prepare_seconds": 35.433510624978226
+            },
+            {
+              "vm": "pulse-docker-dd48d3114578-g0-engine",
+              "cold_prepare_seconds": 35.38648574997205
+            },
+            {
+              "vm": "pulse-docker-dd48d3114578-g0-mac",
+              "resume_ssh_seconds": 12.283286915975623,
+              "boot_and_mac_preserved": true,
+              "previous_allocation_files_absent": true
+            },
+            {
+              "vm": "pulse-docker-dd48d3114578-g0-mac",
+              "job_seconds": 171.14828945801128,
+              "exit": "0",
+              "jobdb": {
+                "status": "COMPLETED",
+                "output_ok": true,
+                "claims": 1,
+                "renewals": 10,
+                "secret_calls": 1
+              }
+            },
+            {
+              "vm": "pulse-docker-dd48d3114578-g0-mac",
+              "cleanup_seconds": 1.0137282919604331
+            },
+            {
+              "vm": "pulse-docker-dd48d3114578-g0-engine",
+              "cleanup_seconds": 0.2369264999870211
+            },
+            {
+              "vm": "pulse-docker-dd48d3114578-g1-engine",
+              "cold_prepare_seconds": 35.68628808297217
+            },
+            {
+              "vm": "pulse-docker-dd48d3114578-g1-mac",
+              "resume_ssh_seconds": 10.120281792012975,
+              "boot_and_mac_preserved": true,
+              "previous_allocation_files_absent": true
+            },
+            {
+              "vm": "pulse-docker-dd48d3114578-g1-mac",
+              "job_seconds": 173.29335704102414,
+              "exit": "0",
+              "jobdb": {
+                "status": "COMPLETED",
+                "output_ok": true,
+                "claims": 1,
+                "renewals": 10,
+                "secret_calls": 1
+              }
+            },
+            {
+              "vm": "pulse-docker-dd48d3114578-g1-mac",
+              "cleanup_seconds": 0.5290946250315756
+            },
+            {
+              "vm": "pulse-docker-dd48d3114578-g1-engine",
+              "cleanup_seconds": 0.22652358398772776
+            },
+            {
+              "vm": "pulse-docker-dd48d3114578-template",
+              "cleanup_seconds": 0.2083227499970235
+            }
+          ],
+          "required_cases": {
+            "no_bind_macos_job": {
+              "description": "no_bind_macos_job",
+              "status": "passed",
+              "reason": "Real macOS c2j lease with native private checkout; supported no-bind contract and replay passed.",
+              "generations": 2
+            },
+            "no_bind_macos_sdk": {
+              "description": "no_bind_macos_sdk",
+              "status": "passed",
+              "reason": "Official Docker Python SDK 7.1.0, concurrent requests, run API; Go Testcontainers with Ryuk passed in relay tests."
+            },
+            "no_bind_macos_java": {
+              "description": "no_bind_macos_java",
+              "status": "passed",
+              "reason": "Java Testcontainers 2.0.5, copied fixture and TCP service, normal Ryuk enabled."
+            },
+            "no_bind_registry": {
+              "description": "no_bind_registry",
+              "status": "passed",
+              "reason": "Synthetic task credentials: login, push, delete local tag, authenticated pull, run, logout and denied pull; private registry."
+            },
+            "no_bind_unsupported": {
+              "description": "no_bind_unsupported",
+              "status": "passed",
+              "reason": "Host volumes, file-backed secrets/configs and disguised driver binds do not expose primary files. No universal rejection claim."
+            },
+            "no_bind_controller_independence": {
+              "description": "no_bind_controller_independence",
+              "status": "passed",
+              "reason": "Detached worker-local TCP bridge; one-shot provider processes close/reopen without terminating guest SSH. Production service supervision remains implementation work."
+            },
+            "macos_authenticated_api": {
+              "description": "Allocation-scoped authenticated bridge and conventional Unix socket",
+              "status": "passed",
+              "reason": "Per-allocation SSH key, pinned engine host key, real macOS Unix socket including conventional /var/run/docker.sock. Public admin image credentials remain a lab limitation."
+            },
+            "macos_tcp_ports": {
+              "description": "Fixed/dynamic loopback and wildcard publications reach macOS localhost",
+              "status": "passed",
+              "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+            },
+            "macos_start_gate": {
+              "description": "Start completion waits for relay binding; no registration sleeps",
+              "status": "passed",
+              "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+            },
+            "macos_port_conflicts": {
+              "description": "Local port conflict is detected and reported",
+              "status": "passed",
+              "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+            },
+            "macos_relay_recovery": {
+              "description": "Relay restart discovers existing publications and restores forwarding",
+              "status": "passed",
+              "reason": "Force-killed relay reconnected and rediscovered preexisting Linux publication at localhost:18080."
+            },
+            "no_bind_snapshot_reuse": {
+              "description": "Two resumed allocations from a distinct credential-free template",
+              "status": "passed",
+              "reason": "Two or more resumed clones preserved template boot/MAC; prior job/key files absent and distinct fresh engine IDs.",
+              "generations": 2
+            }
+          },
+          "pairs": [
+            {
+              "generation": 0,
+              "primary": "pulse-docker-dd48d3114578-g0-mac",
+              "engine": "pulse-docker-dd48d3114578-g0-engine",
+              "engine_id": "3defd8c6-671e-42c4-bb23-8020d79f367a",
+              "keys": {
+                "host_key_sha256": "322e70c7b02c5ed414499644dfb05f4cc6e418606ab305f8bf48542e788449c8",
+                "client_key_sha256": "d37f658f6ca7f44e0345ca9738ce1e589f959d0f03b130b974db3018e1c10f0a"
+              },
+              "ready_unix": 1794018435.277067,
+              "job_finished_unix": 1794018610.759964,
+              "job_running_first_unix": 1794018439.546321,
+              "job_running_last_unix": 1794018606.075107
+            },
+            {
+              "generation": 1,
+              "primary": "pulse-docker-dd48d3114578-g1-mac",
+              "engine": "pulse-docker-dd48d3114578-g1-engine",
+              "engine_id": "995d6a6d-7c71-4543-a72d-698f85198694",
+              "keys": {
+                "host_key_sha256": "bd7e21d5120a70102ced4d3a2a633e3d537a645814901244f8604d08b00a6f1e",
+                "client_key_sha256": "39f0eb0581c630e1269e57aa80f6a80c3af52fe9cc44c0ff48ab703c010b1333"
+              },
+              "ready_unix": 1794018809.839415,
+              "job_finished_unix": 1794018986.6861591,
+              "job_running_first_unix": 1794018813.892554,
+              "job_running_last_unix": 1794018982.413043
+            }
+          ],
+          "cleanup_errors": [],
+          "direct_guest_route_reachable": false,
+          "tart_version": "2.41.1"
+        },
+        {
+          "evidence": "20261107T022409Z-docker-tart-35228",
+          "result": "passed",
+          "build": {
+            "c2j_selection": "v0.0.124",
+            "c2j_commit": "33e2a4de4e99d3a577a38dca4b8de33d43a099ce"
+          },
+          "template": {
+            "name": "pulse-docker-ee94dcbe17b2-template",
+            "boot_id": "899256E8-8FDB-4693-AACF-5B420B3492B5",
+            "mac": "46:7f:db:d1:6c:62"
+          },
+          "samples": [
+            {
+              "vm": "pulse-docker-ee94dcbe17b2-template",
+              "cold_ssh_seconds": 19.72839504200965,
+              "cold_prepare_seconds": 36.00516100000823
+            },
+            {
+              "vm": "pulse-docker-ee94dcbe17b2-g0-engine",
+              "cold_prepare_seconds": 38.43568250001408
+            },
+            {
+              "vm": "pulse-docker-ee94dcbe17b2-g0-mac",
+              "resume_ssh_seconds": 14.907296416989993,
+              "boot_and_mac_preserved": true,
+              "previous_allocation_files_absent": true
+            },
+            {
+              "vm": "pulse-docker-ee94dcbe17b2-g0-mac",
+              "job_seconds": 173.1265450840001,
+              "exit": "0",
+              "jobdb": {
+                "status": "COMPLETED",
+                "output_ok": true,
+                "claims": 1,
+                "renewals": 10,
+                "secret_calls": 1
+              }
+            },
+            {
+              "vm": "pulse-docker-ee94dcbe17b2-g0-mac",
+              "cleanup_seconds": 0.5024157079751603
+            },
+            {
+              "vm": "pulse-docker-ee94dcbe17b2-g0-engine",
+              "cleanup_seconds": 0.2388789170072414
+            },
+            {
+              "vm": "pulse-docker-ee94dcbe17b2-g1-engine",
+              "cold_prepare_seconds": 35.495930916047655
+            },
+            {
+              "vm": "pulse-docker-ee94dcbe17b2-g1-mac",
+              "resume_ssh_seconds": 10.448716957995202,
+              "boot_and_mac_preserved": true,
+              "previous_allocation_files_absent": true
+            },
+            {
+              "vm": "pulse-docker-ee94dcbe17b2-g1-mac",
+              "job_seconds": 174.4029321250273,
+              "exit": "0",
+              "jobdb": {
+                "status": "COMPLETED",
+                "output_ok": true,
+                "claims": 1,
+                "renewals": 10,
+                "secret_calls": 1
+              }
+            },
+            {
+              "vm": "pulse-docker-ee94dcbe17b2-g1-mac",
+              "cleanup_seconds": 0.5124442080268636
+            },
+            {
+              "vm": "pulse-docker-ee94dcbe17b2-g1-engine",
+              "cleanup_seconds": 0.23178362502949312
+            },
+            {
+              "vm": "pulse-docker-ee94dcbe17b2-template",
+              "cleanup_seconds": 0.1856395830400288
+            }
+          ],
+          "required_cases": {
+            "no_bind_macos_job": {
+              "description": "no_bind_macos_job",
+              "status": "passed",
+              "reason": "Real macOS c2j lease with native private checkout; supported no-bind contract and replay passed.",
+              "generations": 2
+            },
+            "no_bind_macos_sdk": {
+              "description": "no_bind_macos_sdk",
+              "status": "passed",
+              "reason": "Official Docker Python SDK 7.1.0, concurrent requests, run API; Go Testcontainers with Ryuk passed in relay tests."
+            },
+            "no_bind_macos_java": {
+              "description": "no_bind_macos_java",
+              "status": "passed",
+              "reason": "Java Testcontainers 2.0.5, copied fixture and TCP service, normal Ryuk enabled."
+            },
+            "no_bind_registry": {
+              "description": "no_bind_registry",
+              "status": "passed",
+              "reason": "Synthetic task credentials: login, push, delete local tag, authenticated pull, run, logout and denied pull; private registry."
+            },
+            "no_bind_unsupported": {
+              "description": "no_bind_unsupported",
+              "status": "passed",
+              "reason": "Host volumes, file-backed secrets/configs and disguised driver binds do not expose primary files. No universal rejection claim."
+            },
+            "no_bind_controller_independence": {
+              "description": "no_bind_controller_independence",
+              "status": "passed",
+              "reason": "Detached worker-local TCP bridge; one-shot provider processes close/reopen without terminating guest SSH. Production service supervision remains implementation work."
+            },
+            "macos_authenticated_api": {
+              "description": "Allocation-scoped authenticated bridge and conventional Unix socket",
+              "status": "passed",
+              "reason": "Per-allocation SSH key, pinned engine host key, real macOS Unix socket including conventional /var/run/docker.sock. Public admin image credentials remain a lab limitation."
+            },
+            "macos_tcp_ports": {
+              "description": "Fixed/dynamic loopback and wildcard publications reach macOS localhost",
+              "status": "passed",
+              "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+            },
+            "macos_start_gate": {
+              "description": "Start completion waits for relay binding; no registration sleeps",
+              "status": "passed",
+              "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+            },
+            "macos_port_conflicts": {
+              "description": "Local port conflict is detected and reported",
+              "status": "passed",
+              "reason": "Real macOS/Linux IPv4 TCP gateway; immediate local connect, dynamic loopback/wildcard mappings and local bind conflict. See macos-relay-network.json."
+            },
+            "macos_relay_recovery": {
+              "description": "Relay restart discovers existing publications and restores forwarding",
+              "status": "passed",
+              "reason": "Force-killed relay reconnected and rediscovered preexisting Linux publication at localhost:18080."
+            },
+            "no_bind_snapshot_reuse": {
+              "description": "Two resumed allocations from a distinct credential-free template",
+              "status": "passed",
+              "reason": "Two or more resumed clones preserved template boot/MAC; prior job/key files absent and distinct fresh engine IDs.",
+              "generations": 2
+            }
+          },
+          "pairs": [
+            {
+              "generation": 0,
+              "primary": "pulse-docker-ee94dcbe17b2-g0-mac",
+              "engine": "pulse-docker-ee94dcbe17b2-g0-engine",
+              "engine_id": "e0bf1272-72fd-4f50-a2b7-37231591e092",
+              "keys": {
+                "host_key_sha256": "e385c8c8c7f87593bc79140291bc46da555b052464632aed15cbbea69c7ab18d",
+                "client_key_sha256": "329e8a1f4a511b19fef76a72ad1640123821eaebdf87cfeb59d88b114163acda"
+              },
+              "ready_unix": 1794018436.122478,
+              "job_finished_unix": 1794018613.422721,
+              "job_running_first_unix": 1794018440.12927,
+              "job_running_last_unix": 1794018608.3740768
+            },
+            {
+              "generation": 1,
+              "primary": "pulse-docker-ee94dcbe17b2-g1-mac",
+              "engine": "pulse-docker-ee94dcbe17b2-g1-engine",
+              "engine_id": "133163a7-ad5a-4e81-9235-9ef24cf8df60",
+              "keys": {
+                "host_key_sha256": "32664c354a45dbaa7fab5417e496dad5cbb9bba2d48f1c25eeaa4456346680d5",
+                "client_key_sha256": "82b755d7839f66e666e23d8ce67ef7466ff8bec8342422adcb58da300fb7cff5"
+              },
+              "ready_unix": 1794018810.4084291,
+              "job_finished_unix": 1794018988.32052,
+              "job_running_first_unix": 1794018814.4753642,
+              "job_running_last_unix": 1794018983.936192
+            }
+          ],
+          "cleanup_errors": [],
+          "direct_guest_route_reachable": false,
+          "tart_version": "2.41.1"
+        }
+      ],
+      "scope": "Native macOS primaries only; two slots and two suspended generations; no production allocator or pressure guarantees."
     }
   ]
 }

@@ -49,8 +49,9 @@ That matrix needs capacity for four running VMs (16 vCPUs, 32 GiB plus host
 overhead). Expect 15–30 minutes plus downloads. It checks distinct template MACs,
 engine IDs and transport keys and requires overlapping job intervals. Each child
 runs the full job/registry/SDK scope. Both child archives are included in its
-relative `test-results/...` archive. The native matrix has not been run here;
-it does not claim the broader pressure/fault matrix is complete.
+relative `test-results/...` archive. The native matrix passed on November 7 in
+`20261107T022409Z-docker-matrix-35171`; see the findings for four-job evidence and
+timings. It does not establish the broader pressure/fault matrix.
 
 Unsupported combinations fail before provisioning.
 Tools are rebuilt from resolved c2j release source and recorded with the report.

@@ -1,6 +1,7 @@
 # Docker capability implementation plan
 
-Status: design selected; live qualification still has gates, November 6, 2026. Implements the
+Status: design selected; native suspended/concurrent prototype passed November 7, 2026;
+production qualification still has gates. Implements the
 [no-bind requirements](../pulse-tart-docker-capability-requirements.md).
 Production defaults remain unchanged. Qualification results below distinguish
 live evidence, implementation decisions, and release gates.
@@ -53,6 +54,11 @@ helper mount is allowed entirely inside the disposable engine VM.
   [current findings](docker-no-bind-findings.md) and
   [machine-readable evidence](docker-no-bind-results.json). Neither `docker info`
   nor successful unit tests substitutes for the remaining live gates.
+- Native `20261107T022409Z-docker-matrix-35171` passed: two suspended slots,
+  two generations each, four real c2j jobs, fresh engine/key identities, and
+  166–168 seconds of observed job overlap per generation. All ten owned VM
+  records were cleaned. The worker-local bridge worked despite isolated sibling
+  guest networking. This qualifies the prototype path, not production recovery.
 
 ## Implementation structure
 
@@ -151,7 +157,8 @@ restore owned bindings after restart, and release them only with its allocation.
 Its state stores target native UID/address and listener identity, not a job lease
 or Orchard credential. Authenticate the stream end-to-end using the same guest
 SSH keys as Orchard. Do not require bridged networking or change host firewall
-policy as a hidden prerequisite. Native-host reachability remains a live gate.
+policy as a hidden prerequisite. Native-host reachability passed the two-slot
+matrix; service supervision and recovery remain implementation gates.
 
 Map engine publications to the same IPv4 loopback port on macOS. Gate successful
 start/restart on the affected container's listener readiness. Return an error and
@@ -230,21 +237,23 @@ existing worker termination contract; do not give the companion the JobDB lease.
    capacity math, image update command and explicit supported/unsupported examples.
    Enable production discovery only after the selected profile passes acceptance.
 
-Required remaining measurements include prepared cold Linux boot, macOS resumed
-pair readiness, build/8 MiB transfer/Compose timings, idle/loaded resource use,
-cleanup latency, and sample counts. Carry failed attempts into findings instead
+The native matrix measured macOS resume-to-SSH at 10.1–14.9 seconds (four samples)
+and VM cleanup at 0.19–1.01 seconds (ten samples). These are not prepared-pair
+handoff latency. Remaining measurements include prepared cold Linux boot, complete
+resumed pair readiness, repeated build/transfer/Compose benchmarks, and idle/loaded
+resource use. Carry failed attempts into findings instead
 of rewriting them as success after a fix. Test reaper behavior with normal cleanup
 helpers enabled and copy APIs; no blanket Testcontainers compatibility claim.
 
 ## Next experiments and stopping criteria
 
-Run `./scripts/test-macos-docker-matrix.py` on the worker with capacity for four
-VMs. Its first native run resumed both first-generation macOS clones, then failed
-before endpoint/job qualification on a protected public-key read. That harness
-permission bug is fixed; a rerun is required. A pass establishes the native endpoint
-path and two independently named/MAC-addressed suspended templates, two jobs per
-slot, distinct engine/key identities and overlapping job intervals. It is not a
-substitute for the production allocator failure tests.
+`./scripts/test-macos-docker-matrix.py` passed on native Tart after fixing the
+first attempt's public-key read permissions. It established the native endpoint
+path, two independently named/MAC-addressed suspended templates, two jobs per
+slot, distinct engine/key identities and overlapping job intervals. At most two
+macOS and two Linux VMs run at once. Retain it as the native regression entry
+point. Native Linux-primary c2j acceptance and the equivalent Orchard
+suspended/concurrent matrix remain separate coverage gaps.
 
 Before release, exercise the implemented paired state machine with a failure at
 every transition: first VM created, second VM created, endpoint configured,
@@ -261,9 +270,11 @@ usage, failure visibility and cleanup. Use allocation-owned disks only and fixed
 experiment limits. If the 4 CPU/8 GiB companion fails, tune its profile and repeat;
 do not infer that the unmeasured smaller profile is adequate.
 
-These remaining tests are explicit implementation/release gates. The available
-lab cannot establish the four-VM concurrent case; do not call the whole design
-production-qualified or the full requirements completed until those results arrive.
+These remaining tests are explicit implementation/release gates. The Orchard
+lab still has only two VM capacity units; the native concurrency result does not
+qualify Orchard pair scheduling. Cross-allocation enumeration/prune isolation,
+full engine-state residue checks, recovery and pressure also need explicit tests.
+Do not call the whole design production-qualified until those results arrive.
 
 Primary references: [Orchard endpoint API](https://github.com/openai/orchard/blob/main/pkg/resource/v1/endpoint.go),
 [Docker build contexts](https://docs.docker.com/build/concepts/context/),
