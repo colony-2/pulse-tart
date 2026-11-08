@@ -596,3 +596,57 @@ func TestLinuxDetachedRunDoesNotRequestUnsupportedSuspension(t *testing.T) {
 	}
 	t.Fatal("run did not finish")
 }
+
+func TestForeignInventoryPreservesPowerWithoutTakingOwnership(t *testing.T) {
+	b, m, _ := fixture(t)
+	// Reproduce the qualification host: four leftover stopped templates and no
+	// running VMs. They must not consume any of the two macOS running slots.
+	for _, name := range []string{"old-1", "old-2", "old-3", "old-4"} {
+		m.vms[name] = hardware{Name: name, State: "stopped"}
+	}
+	vms, err := b.List(t.Context())
+	if err != nil || len(vms) != 4 {
+		t.Fatal(vms, err)
+	}
+	for _, v := range vms {
+		if !v.Stopped() || v.PowerState != "stopped" || v.UID != "foreign:"+v.Name {
+			t.Fatalf("stopped template counted as active: %+v", v)
+		}
+		if err := b.Stop(t.Context(), v.Name, v.UID); err == nil {
+			t.Fatal("foreign observation authorized stop")
+		}
+		if err := b.Delete(t.Context(), v.Name); err == nil {
+			t.Fatal("foreign observation authorized deletion")
+		}
+	}
+	for _, tc := range []struct {
+		state   string
+		running bool
+		stopped bool
+	}{
+		{"running", true, false},
+		{"running", false, false},
+		{"suspended", false, true},
+		{"stopped", true, false},
+		{"suspended", true, false},
+		{"", false, false},
+		{"unrecognized", false, false},
+	} {
+		m.vms = map[string]hardware{"foreign": {Name: "foreign", State: tc.state, Running: tc.running}}
+		vms, err := b.List(t.Context())
+		if err != nil || len(vms) != 1 {
+			t.Fatal(vms, err)
+		}
+		if vms[0].Stopped() != tc.stopped || vms[0].PowerState != tc.state {
+			t.Fatalf("state=%q running=%v: %+v", tc.state, tc.running, vms[0])
+		}
+	}
+	if len(b.records) != 0 {
+		t.Fatal("inventory adopted foreign VMs")
+	}
+	for _, call := range m.calls {
+		if call[0] != "list" {
+			t.Fatalf("foreign inventory mutated native resources: %v", call)
+		}
+	}
+}

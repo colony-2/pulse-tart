@@ -323,7 +323,16 @@ func (b *Client) List(ctx context.Context) ([]backend.VM, error) {
 	out := []backend.VM{}
 	for _, h := range inventory {
 		if b.records[h.Name] == nil {
-			out = append(out, backend.VM{Spec: backend.Spec{Name: h.Name}, UID: "foreign:" + h.Name})
+			// Preserve observed power without adopting the VM. Inventory consumers
+			// must distinguish stopped foreign templates from running instances.
+			// Missing/unknown state remains conservatively active; Running wins
+			// over a contradictory stopped/suspended state.
+			running := "true"
+			if !h.Running && (h.State == "stopped" || h.State == "suspended") {
+				running = "false"
+			}
+			out = append(out, backend.VM{Spec: backend.Spec{Name: h.Name}, UID: "foreign:" + h.Name,
+				PowerState: h.State, Conditions: []backend.Condition{{Type: "running", State: running}}})
 			continue
 		}
 		v, e := b.get(ctx, h.Name)
