@@ -151,18 +151,53 @@ The tested client/engine versions are 29.8.1/29.1.3, Buildx 0.31.1 and the Compo
 resolves the latest c2j release during preparation.
 
 Direct Tart's Linux integration passed in native run
-`20261107T042440Z-docker-library-tart-85305`. That run's macOS case stopped at
-worker endpoint bootstrap, before primary creation or lease delivery. The
-Background session fix passed the real launchd supervisor test in a disposable
-macOS guest; the full native macOS allocation still needs a rerun:
+`20261107T042440Z-docker-library-tart-85305`. The macOS integration passed on
+November 8 in `20261108T014458Z-docker-library-tart-84863` after the launchd
+Background session fix: one claim, ten renewals, one secret resolution,
+reopen/replay, Docker work and paired cleanup. The live case took 471 seconds;
+the native endpoint preflight took 2.32 seconds. The run also passed the Go race
+suite and all 31 Python tests. The unrelated `TestLive` skip is expected in this
+driver; `TestLiveDockerLibrary` is the required live test.
+
+The remaining native qualification has one command, with no arguments:
 
 ```sh
-./scripts/test-macos-docker-library.sh tart darwin
+./scripts/test-macos-docker-qualification.sh
 ```
 
-This retains the full Go/Python regression suites while selecting the macOS live
-case. Use the command without arguments to test both live platforms.
-Before broad production use, qualify that allocator and concurrent allocations,
-real controller/worker crash boundaries, private-disk/memory/CPU pressure and
-cross-allocation prune isolation. Deterministic recovery tests supplement these
-live gates; they do not replace them.
+This runs the regression suite and three generations of two production macOS
+allocations. Each has its own Linux engine. It checks overlapping real c2j jobs,
+identical container/volume names and TCP ports, cross-allocation prune isolation,
+controller SIGKILL and replay, guest relay/worker endpoint SIGKILL, Docker daemon
+restart, primary/engine VM loss, paired cleanup, and fresh jobs after faults.
+All six allocations must have distinct engine IDs and transport keys. Four jobs
+must complete with one claim each; the two jobs used for VM-loss injection are
+expected to be interrupted.
+
+Pressure stays inside disposable engines: four CPU workers with a 3.5-CPU quota
+and roughly 4 GiB of touched memory, a separate 64 MiB container OOM test, and
+ENOSPC on a verified private 8 GiB loop filesystem. The other allocation must
+remain reachable throughout. These are bounded isolation checks, not physical
+host exhaustion tests. The CPU/memory controls use Docker's documented
+[container resource limits](https://docs.docker.com/engine/containers/resource_constraints/).
+
+Allow approximately 30–60 minutes plus downloads; the test limit is 100 minutes,
+including cleanup allowance. Peak allocation size is four VMs / 16 vCPUs /
+32 GiB RAM, plus host overhead. No more than two macOS VMs may run, including
+base/template builders; the test guards native create dispatch as well as checking
+inventory. Stop other running VMs first and run this suite alone. It requires at
+least 40 GiB free in the Tart directory and uses worker ports 45200–45201.
+
+The script archives frozen sources, progress, per-stage evidence, real JobDB
+results and redacted diagnostics under `test-results/`, and prints relative
+paths. A missing stage, reused identity, duplicate claim, failed cleanup, skipped
+live test or failed regression makes the report incomplete. Failed runs retain
+the private recovery state path printed in the log; credentials are excluded
+from the archive. `TestLive` and `TestLiveDockerLibrary` skips are expected in
+this driver: the required live test is `TestLiveDockerQualification`.
+
+This qualification script is implemented but has not yet passed on a native
+Mac. Its result certifies the listed native worker scenarios, not physical host
+power loss or Orchard fault behavior. The basic library script remains useful
+for routine integration: no arguments selects Linux and macOS; `tart darwin`
+selects macOS only. There is no need to run both forms to qualify one revision.

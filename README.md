@@ -99,6 +99,10 @@ Runtime job-file binds and file-backed Compose secrets/configs are unsupported.
 See [Docker library configuration and lifecycle](docs/docker-library.md) for the
 config API, worker endpoint requirements, companion sizing, standalone image
 updates and the dedicated `scripts/test-macos-docker-library.sh` test command.
+For native concurrency, fault recovery, pressure and isolation qualification, run
+`./scripts/test-macos-docker-qualification.sh` once with no arguments. It uses at
+most two macOS VMs plus two Linux engines; run it alone. See the linked guide for
+resource requirements, coverage and current validation status.
 Docker remains opt-in; native integrated concurrency and real fault/pressure
 qualification are release gates, separate from the passed prototype matrix.
 

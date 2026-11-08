@@ -12,7 +12,9 @@ disk=$2
 export DEBIAN_FRONTEND=noninteractive
 if ! command -v docker >/dev/null || [[ $(docker --version) != *" $version,"* ]]; then
  apt-get update
- selected=$(apt-cache madison docker.io | awk -v v="$version" '$3 ~ "^([0-9]+:)?" v "([+~.-]|$)" {print $3;exit}')
+ # Consume all apt-cache output: exiting awk early can SIGPIPE apt-cache and
+ # fail preparation under pipefail when the repository lists many versions.
+ selected=$(apt-cache madison docker.io | awk -v v="$version" '!found && $3 ~ "^([0-9]+:)?" v "([+~.-]|$)" {print $3;found=1}')
  [[ -n $selected ]]
  apt-get install -y "docker.io=$selected" docker-buildx docker-compose-v2 openssh-server e2fsprogs
 fi
