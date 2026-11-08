@@ -8,7 +8,8 @@ func VMCount(n int) *int { return &n }
 // ResolveConfig fills conventions, validates configuration and returns an
 // independent copy without contacting a backend or creating files or VMs.
 // Constructors call it automatically. OwnerID and StateDir remain required.
-// Omitted slots use the first configured base for each OS at 4 vCPU / 8 GiB.
+// Omitted slots make every configured base usable at 4 vCPU / 8 GiB. Per-base
+// template pools share the OS and total job limits; they do not add concurrency.
 // Linux includes Docker; macOS Docker remains opt-in through Config.Docker.
 func ResolveConfig(c Config) (Config, error) {
 	counts, err := c.VMCounts.Normalize()
@@ -17,7 +18,7 @@ func ResolveConfig(c Config) (Config, error) {
 	}
 	c.VMCounts = counts
 	if c.Bases == nil {
-		c.Bases = []Base{DefaultBases()[0], DefaultLinuxBase()}
+		c.Bases = append(DefaultBases(), DefaultLinuxBase())
 	}
 	if c.Slots == nil {
 		macDocker := c.Docker != nil
@@ -27,15 +28,17 @@ func ResolveConfig(c Config) (Config, error) {
 			if os == "" {
 				os = "darwin"
 			}
-			if seen[os] {
-				continue
-			}
-			seen[os] = true
 			g := SlotGroup{Name: "standard", Base: b.Name, Count: min(*counts.MacOS, *counts.Total)}
 			if os == "linux" {
 				g.Name = "linux"
 				g.Count = min(*counts.Linux, *counts.Total)
+				if seen[os] {
+					g.Name = "linux-" + config.ImageToken(b.Name)
+				}
+			} else if seen[os] {
+				g.Name = "mac-" + config.ImageToken(b.Name)
 			}
+			seen[os] = true
 			if os == "linux" || macDocker {
 				if c.Docker == nil {
 					c.Docker = &DockerConfig{Profiles: []DockerEngineProfile{DefaultDockerEngine()}}

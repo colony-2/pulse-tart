@@ -252,3 +252,83 @@ func TestSourcePreparationWaitsForPhysicalMacCapacity(t *testing.T) {
 		}
 	}
 }
+
+func TestMacVersionsShareTwoJobSlots(t *testing.T) {
+	for _, versions := range [][2]string{{"macos-26-arm64", "macos-26-arm64"}, {"macos-15-arm64", "macos-15-arm64"}, {"macos-26-arm64", "macos-15-arm64"}} {
+		t.Run(fmt.Sprint(versions), func(t *testing.T) {
+			p, f := fixture(t)
+			first, second := p.Config.Bases[0], p.Config.Bases[0]
+			first.Name, second.Name = "macos-26-arm64", "macos-15-arm64"
+			p.Config.Bases = []config.Base{first, second}
+			p.Config.Slots = []config.SlotGroup{
+				{Name: "standard", Base: first.Name, Count: 2, CPU: 4, MemoryMiB: 8192},
+				{Name: "mac-macos-15-arm64", Base: second.Name, Count: 2, CPU: 4, MemoryMiB: 8192},
+			}
+			for range 12 {
+				if err := p.Reconcile(t.Context()); err != nil {
+					t.Fatal(err)
+				}
+				mac := 0
+				for _, vm := range f.vms {
+					if !vm.Stopped() {
+						mac++
+					}
+				}
+				if mac > 2 {
+					t.Fatal("preparing multiple versions exceeded the macOS ceiling")
+				}
+			}
+			if len(p.Store.data.Slots) != 4 {
+				t.Fatal("missing version-specific templates")
+			}
+			for i, base := range versions {
+				l := launch(fmt.Sprint("version-job-", i))
+				l.Base = base
+				got, err := p.Submit(t.Context(), []api.Launch{l})
+				if err != nil || got[0].Status != api.Accepted {
+					t.Fatal("advertised version cannot execute", base, got, err)
+				}
+				if p.dockerGroup(p.Store.data.Records[l.LaunchID].SlotID).Base != base {
+					t.Fatal("job dispatched to wrong OS version")
+				}
+			}
+			got, err := p.Submit(t.Context(), []api.Launch{launch("overflow")})
+			if err != nil || got[0].Status != api.NoCapacity || len(p.Store.data.Records) != 2 {
+				t.Fatal("version-specific templates multiplied concurrency", got, err)
+			}
+		})
+	}
+}
+
+func TestMacDockerCanRebalanceBetweenVersions(t *testing.T) {
+	p, _ := dockerFixture(t, false)
+	p.Config.Slots[0].Count = 2
+	second := p.Config.Bases[0]
+	second.Name = "macos-secondary"
+	p.Config.Bases = append(p.Config.Bases, second)
+	p.Config.Slots = append(p.Config.Slots, config.SlotGroup{Name: "secondary", Base: second.Name, Count: 2, CPU: 4, MemoryMiB: 8192, DockerProfile: "engine"})
+	warmCountPools(t, p, 2)
+	l := dockerLaunch()
+	l.Base = second.Name
+	got, err := p.Submit(t.Context(), []api.Launch{l})
+	if err != nil || got[0].Status != api.NoCapacity {
+		t.Fatal("expected idle preferred version to make room", got, err)
+	}
+	for range 30 {
+		if err := p.Reconcile(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		got, err = p.Submit(t.Context(), []api.Launch{l})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got[0].Status == api.Accepted {
+			pair := p.Store.data.Pairs[p.Store.data.Records[l.LaunchID].PairID]
+			if pair.Base != second.Name || len(p.jobReservations()) > 2 {
+				t.Fatal("incorrect base or excessive macOS concurrency")
+			}
+			return
+		}
+	}
+	t.Fatal("secondary Docker base never became usable")
+}

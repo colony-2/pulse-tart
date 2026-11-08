@@ -33,7 +33,8 @@ runtime, err := tart.NewTart(cfg, tart.TartConfig{DockerEndpoint: endpoint})
 // })
 ```
 
-With omitted slots, the library creates two macOS slots and four Linux slots at
+With omitted slots, each macOS base gets two template positions sharing a
+two-job limit, and the default Linux base gets four positions. Every VM uses
 4 vCPU / 8 GiB. Linux gets the standard Docker profile automatically. Set
 `Docker: &tart.DockerConfig{}` to enable that profile for macOS too; this requires
 a backend `DockerEndpoint`. Linux-only Docker needs no worker endpoint.

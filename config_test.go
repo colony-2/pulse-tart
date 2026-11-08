@@ -29,10 +29,10 @@ func TestCountConventions(t *testing.T) {
 			if got := [3]int{*c.VMCounts.MacOS, *c.VMCounts.Linux, *c.VMCounts.Total}; got != tc.want {
 				t.Fatalf("counts = %v, want %v", got, tc.want)
 			}
-			if len(c.Slots) != 2 || c.Slots[0].Base != "macos-26-arm64" || c.Slots[1].Base != "ubuntu-24.04-arm64" {
+			if len(c.Slots) != 3 || c.Slots[0].Base != "macos-26-arm64" || c.Slots[1].Base != "macos-15-arm64" || c.Slots[2].Base != "ubuntu-24.04-arm64" {
 				t.Fatal("unexpected conventional pools", c.Slots)
 			}
-			if c.Slots[0].Count != min(tc.want[0], tc.want[2]) || c.Slots[1].Count != min(tc.want[1], tc.want[2]) {
+			if c.Slots[0].Count != min(tc.want[0], tc.want[2]) || c.Slots[1].Count != min(tc.want[0], tc.want[2]) || c.Slots[2].Count != min(tc.want[1], tc.want[2]) {
 				t.Fatal("pool count disagrees with limits", c.Slots)
 			}
 			for _, g := range c.Slots {
@@ -40,7 +40,7 @@ func TestCountConventions(t *testing.T) {
 					t.Fatal("unexpected VM size", g)
 				}
 			}
-			if c.Slots[0].DockerProfile != "" || c.Slots[1].DockerProfile == "" || c.NeedsDockerEndpoint() {
+			if c.Slots[0].DockerProfile != "" || c.Slots[1].DockerProfile != "" || c.Slots[2].DockerProfile == "" || c.NeedsDockerEndpoint() {
 				t.Fatal("Linux defaults require macOS Docker connectivity")
 			}
 			again, err := ResolveConfig(c)
@@ -88,8 +88,13 @@ func TestDefaultOrchardAndCountCopies(t *testing.T) {
 		t.Fatal("retained caller-owned counts")
 	}
 	caps, err := r.GetCapabilities(t.Context())
-	if err != nil || len(caps.Bases) != 2 {
+	if err != nil || !caps.BasesComplete || len(caps.Bases) != 3 {
 		t.Fatal("missing conventional base catalog", caps, err)
+	}
+	for i, name := range []string{"macos-26-arm64", "macos-15-arm64", "ubuntu-24.04-arm64"} {
+		if caps.Bases[i].Name != name {
+			t.Fatal("missing or reordered advertised base", caps.Bases)
+		}
 	}
 }
 
@@ -98,11 +103,33 @@ func TestConventionalMacDockerRemainsExplicit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !c.NeedsDockerEndpoint() || c.Slots[0].DockerProfile != "standard" || c.Slots[1].DockerProfile != "standard" {
+	if !c.NeedsDockerEndpoint() || c.Slots[0].DockerProfile != "standard" || c.Slots[1].DockerProfile != "standard" || c.Slots[2].DockerProfile != "standard" {
 		t.Fatal("explicit Docker did not enable both pools", c.Slots)
 	}
 	c, err = ResolveConfig(Config{OwnerID: "linux", StateDir: t.TempDir(), Docker: &DockerConfig{}, VMCounts: VMCounts{MacOS: VMCount(0)}})
 	if err != nil || c.NeedsDockerEndpoint() {
 		t.Fatal("disabled macOS requires an endpoint", err)
+	}
+}
+
+func TestEveryConfiguredBaseGetsAStableConventionalGroup(t *testing.T) {
+	bases := []Base{DefaultLinuxBase(), DefaultBases()[0], DefaultBases()[1], DefaultLinuxBase()}
+	bases[3].Name = "private-ubuntu-24.04-arm64-with-a-long-name"
+	c, err := ResolveConfig(Config{OwnerID: "catalog", StateDir: t.TempDir(), Bases: bases})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Slots) != len(bases) || c.Slots[0].Name != "linux" || c.Slots[1].Name != "standard" || c.Slots[2].Name != "mac-macos-15-arm64" {
+		t.Fatal("conventional groups omitted a base or renamed existing sources", c.Slots)
+	}
+	names := map[string]bool{}
+	for i, g := range c.Slots {
+		if g.Base != bases[i].Name || names[g.Name] || len(g.Name) > 32 {
+			t.Fatal("invalid conventional group", g)
+		}
+		names[g.Name] = true
+		if (bases[i].OS == "linux") != (g.DockerProfile != "") {
+			t.Fatal("automatic Linux Docker enabled macOS Docker", g)
+		}
 	}
 }

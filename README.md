@@ -36,8 +36,9 @@ return runtime.Run(ctx)
 Import `tart "github.com/colony-2/pulse-tart"`. Constructors validate/copy configuration and lock the journal; they create no VMs. Drive `Run(ctx)` or call `Reconcile(ctx)` periodically. `Run` returns on cancellation or a reconciliation error; the application owns its retry policy. `Slots()` reports preparation and occupancy; `Images()` reports known prepared sources.
 
 Omitted configuration selects **two macOS job VMs and four Linux job VMs**, each
-with **4 vCPU / 8 GiB**. The bases are Tahoe (`macos-26-arm64`) and Ubuntu 24.04
-(`ubuntu-24.04-arm64`). Larger or smaller VM sizes are currently rejected.
+with **4 vCPU / 8 GiB**. The bases are Tahoe (`macos-26-arm64`), Sequoia
+(`macos-15-arm64`) and Ubuntu 24.04 (`ubuntu-24.04-arm64`). Both macOS versions
+share the same two-job limit. Larger or smaller VM sizes are currently rejected.
 
 Override any of the three job counts; omitted per-OS counts stay at 2 and 4,
 and an omitted total becomes their sum:
@@ -69,10 +70,17 @@ Counts do not automatically scale to host resources. Six default job VMs use
 8 vCPUs / 16 GiB. Choose lower counts for smaller workers.
 
 Explicit `Bases` and `Slots` remain available for base selection. Without slots,
-the first configured base for each OS gets its conventional group (`standard`
-for macOS, `linux` for Linux). An explicit slot group's zero `Count` drains that
-group; its zero CPU/memory values resolve to 4 / 8192. Job limits apply across
-all groups. `C2JVersion` still defaults to `"latest"`.
+every configured base gets a group. The first macOS and Linux groups retain the
+names `standard` and `linux`; later groups use `mac-<base>` or `linux-<base>`
+(long names use a stable hash). The default Sequoia group is `mac-macos-15-arm64`.
+An explicit slot group's zero `Count` drains that group; its zero CPU/memory
+values resolve to 4 / 8192. Job limits apply across all groups. `C2JVersion` still
+defaults to `"latest"`.
+
+Default pools have eight configured positions: two per macOS version and four
+for Linux. These are alternative per-base capacity, with **at most six job VMs
+and two macOS instances** overall. Either macOS version can use both macOS
+positions, or one job can run on each version.
 
 `DefaultBases()` supplies these digest-pinned macOS images, without Xcode.
 `DefaultLinuxBase()` supplies Ubuntu 24.04 ARM64. The default SSH login is
@@ -83,7 +91,12 @@ all groups. `C2JVersion` still defaults to `"latest"`.
 | `macos-26-arm64` | Tahoe 26.6.2 | First |
 | `macos-15-arm64` | Sequoia 15.7.7 | Second |
 
-`GetCapabilities` advertises all configured bases in order, independent of current capacity. Selectors such as `macos-26*` or `macos-*arm64` match concrete names; `*` matches any sequence, other characters are literal, and matching is case-sensitive. All requested capabilities must match. Admission chooses the first configured base with an available slot. Add an explicit slot group to enable another base; the two-macOS limit applies across all versions.
+`GetCapabilities` advertises all configured bases in order, independent of current capacity. Selectors such as `macos-26*` or `macos-*arm64` match concrete names; `*` matches any sequence, other characters are literal, and matching is case-sensitive. All requested capabilities must match. Admission chooses the first configured base with an available slot. With omitted slots, adding a base automatically creates its group; the two-macOS limit applies across all versions.
+
+The provider supports ARM64 guests only. `ubuntu-24.04-amd64` is not an available
+Tart base. Intel binary translation inside an ARM Linux guest is a separate
+feature and is not configured or qualified here; see
+[Apple's Linux translation documentation](https://developer.apple.com/documentation/virtualization/running-intel-binaries-in-linux-vms).
 
 ## Update images independently of Pulse
 
