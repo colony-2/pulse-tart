@@ -1,7 +1,6 @@
 {
   "date": "2026-11-08",
   "scope": "integrated public provider library",
-  "production_qualified": false,
   "runs": [
     {
       "backend": "orchard",
@@ -89,12 +88,6 @@
       }
     }
   ],
-  "remaining_live_gates": [
-    "native concurrent allocations",
-    "controller/worker crash injection",
-    "CPU/memory/private-disk pressure",
-    "cross-allocation prune isolation"
-  ],
   "component_checks": [
     {
       "component": "native worker launchd supervisor",
@@ -128,5 +121,36 @@
     }
   ],
   "qualification_script": "scripts/test-macos-docker-qualification.sh",
-  "qualification_status": "implemented; native live run pending"
+  "qualification_status": "native planned matrix passed; Orchard fault qualification not run",
+  "remaining_native_live_gates": [],
+  "native_qualification": {
+    "result": "passed",
+    "revision": "de6211b1a1d7bda059fbbe861e7f6010bc1efe16",
+    "archive": "test-results/20261108T023758Z-docker-qualification-52820.tar.gz",
+    "source_snapshot": "test-results/20261108T023758Z-docker-qualification-52820/source-sha256.json",
+    "live_test_duration_seconds": 1046.6,
+    "checks": {
+      "concurrent_jobs": true,
+      "controller_sigkill_replay": true,
+      "guest_relay_sigkill": true,
+      "worker_endpoint_sigkill": true,
+      "docker_daemon_sigkill": true,
+      "cpu_memory_pressure": true,
+      "private_disk_enospc": true,
+      "prune_isolation": true,
+      "successful_pair_cleanup": true,
+      "primary_vm_loss": true,
+      "engine_vm_loss": true,
+      "fresh_generation_after_faults": true
+    },
+    "distinct_allocation_identities": true,
+    "distinct_concurrent_macs": true,
+    "completed_jobdb_jobs": 4,
+    "peak_observed_running_macos": 2,
+    "limits": [
+      "bounded container CPU/memory and 8 GiB engine filesystem pressure",
+      "process and VM loss; physical host power loss is not injected",
+      "one native macOS worker; Orchard fault behavior is not certified by this run"
+    ]
+  }
 }

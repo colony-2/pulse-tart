@@ -159,7 +159,7 @@ the native endpoint preflight took 2.32 seconds. The run also passed the Go race
 suite and all 31 Python tests. The unrelated `TestLive` skip is expected in this
 driver; `TestLiveDockerLibrary` is the required live test.
 
-The remaining native qualification has one command, with no arguments:
+The native qualification has one command, with no arguments:
 
 ```sh
 ./scripts/test-macos-docker-qualification.sh
@@ -196,8 +196,16 @@ the private recovery state path printed in the log; credentials are excluded
 from the archive. `TestLive` and `TestLiveDockerLibrary` skips are expected in
 this driver: the required live test is `TestLiveDockerQualification`.
 
-This qualification script is implemented but has not yet passed on a native
-Mac. Its result certifies the listed native worker scenarios, not physical host
-power loss or Orchard fault behavior. The basic library script remains useful
+The native qualification passed on November 8, 2026 in
+`20261108T023758Z-docker-qualification-52820`, testing revision `de6211b`.
+The live test took 1,046.60 seconds (about 17.5 minutes). All twelve stages passed,
+including four completed JobDB jobs, six distinct allocation identities,
+distinct concurrent MAC addresses, and a peak of two running macOS VMs.
+The Go race suite and all 42 Python tests also passed. The frozen source hashes
+and qualification report were independently verified against the archived
+evidence. No further run is required for this planned native matrix.
+
+This result covers the listed native worker scenarios; physical host power loss
+and Orchard fault behavior were not tested. The basic library script remains useful
 for routine integration: no arguments selects Linux and macOS; `tart darwin`
 selects macOS only. There is no need to run both forms to qualify one revision.
