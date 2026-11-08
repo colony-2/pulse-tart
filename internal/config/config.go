@@ -18,6 +18,8 @@ var Err = errors.New("invalid provider configuration")
 
 const DefaultCPU int64 = 4
 const DefaultMemoryMiB int64 = 8192
+const DefaultMacOSVMCount = 2
+const DefaultLinuxVMCount = 4
 const WorkerNameLabel = "org.cirruslabs.orchard.worker-name"
 
 // Secret redacts formatted credentials. Explicit string conversion exposes bytes.
@@ -31,12 +33,46 @@ func (Secret) GoString() string { return "[REDACTED]" }
 type Config struct {
 	OwnerID          string
 	StateDir         string
-	Bases            []Base // Most preferred first; discovery preserves this order.
-	Slots            []SlotGroup
-	C2JVersion       string // Defaults to latest published release; existing images are reused.
+	Bases            []Base      // Most preferred first; nil selects the conventional macOS and Linux bases.
+	Slots            []SlotGroup // Nil selects conventional groups; explicit zero Count drains a group.
+	VMCounts         VMCounts    // Job VM limits; companions and image builders are excluded.
+	C2JVersion       string      // Defaults to latest published release; existing images are reused.
 	PollInterval     time.Duration
 	BootstrapTimeout time.Duration
 	Docker           *Docker
+}
+
+// VMCounts uses nil for a default and a pointer to zero to disable an OS or drain
+// all job VMs. Total defaults to MacOS+Linux. macOS can never exceed two instances.
+type VMCounts struct {
+	MacOS *int
+	Linux *int
+	Total *int
+}
+
+func normalizeVMCount(value *int, fallback, maximum int) (*int, error) {
+	n := fallback
+	if value != nil {
+		n = *value
+	}
+	if n < 0 || n > maximum {
+		return nil, Err
+	}
+	return &n, nil
+}
+
+func (v VMCounts) Normalize() (VMCounts, error) {
+	var err error
+	if v.MacOS, err = normalizeVMCount(v.MacOS, DefaultMacOSVMCount, 2); err != nil {
+		return VMCounts{}, err
+	}
+	if v.Linux, err = normalizeVMCount(v.Linux, DefaultLinuxVMCount, 1000); err != nil {
+		return VMCounts{}, err
+	}
+	if v.Total, err = normalizeVMCount(v.Total, *v.MacOS+*v.Linux, 1002); err != nil {
+		return VMCounts{}, err
+	}
+	return v, nil
 }
 
 // Base names a concrete ARM64 environment. Image must be a digest-pinned
@@ -58,8 +94,8 @@ type SlotGroup struct {
 	Name          string
 	Count         int
 	Base          string
-	CPU           int64
-	MemoryMiB     int64
+	CPU           int64  // Zero or 4; other sizes are currently unsupported.
+	MemoryMiB     int64  // Zero or 8192; other sizes are currently unsupported.
 	DockerProfile string // Empty disables Docker for this group.
 }
 
@@ -121,12 +157,16 @@ func BaseSelector(s string) bool {
 }
 
 // Normalize validates and deep-copies all retained input. Defaults apply equally
-// to both backends. Counts have no default: zero explicitly drains a group.
+// to both backends. Explicit slot-group counts use zero to drain a group.
 func Normalize(c Config) (Config, error) {
 	if !Name(c.OwnerID) || len(c.OwnerID) > 64 || !filepath.IsAbs(c.StateDir) || len(c.Bases) == 0 || len(c.Slots) == 0 {
 		return Config{}, Err
 	}
 	c.StateDir = filepath.Clean(c.StateDir)
+	var err error
+	if c.VMCounts, err = c.VMCounts.Normalize(); err != nil {
+		return Config{}, err
+	}
 	if c.C2JVersion == "" {
 		c.C2JVersion = "latest"
 	}
@@ -186,11 +226,11 @@ func Normalize(c Config) (Config, error) {
 		if s.MemoryMiB == 0 {
 			s.MemoryMiB = DefaultMemoryMiB
 		}
-		if s.CPU < 1 || s.CPU > 256 || s.MemoryMiB < 1024 || s.MemoryMiB > 1048576 {
+		if s.CPU != DefaultCPU || s.MemoryMiB != DefaultMemoryMiB {
 			return Config{}, Err
 		}
 	}
-	if c.Capacity() > 1000 {
+	if c.Capacity() > 1002 {
 		return Config{}, Err
 	}
 	if err := normalizeDocker(&c); err != nil {

@@ -1,6 +1,6 @@
 # Docker through the provider library
 
-Docker is opt-in. The main library now manages provisioning, readiness, handoff
+Docker is included in conventional Linux groups and opt-in for macOS. The main library manages provisioning, readiness, handoff
 and cleanup; applications do not import `experimental/docker` or provision VMs.
 The earlier prototype's successful matrix establishes the architecture. Production
 library integration has its own tests and remaining live qualification gates.
@@ -33,8 +33,12 @@ runtime, err := tart.NewTart(cfg, tart.TartConfig{DockerEndpoint: endpoint})
 // })
 ```
 
-`Config.Docker == nil` and empty `SlotGroup.DockerProfile` preserve ordinary
-macOS behavior. Profiles add `docker` to discovery for their configured bases,
+With omitted slots, the library creates two macOS slots and four Linux slots at
+4 vCPU / 8 GiB. Linux gets the standard Docker profile automatically. Set
+`Docker: &tart.DockerConfig{}` to enable that profile for macOS too; this requires
+a backend `DockerEndpoint`. Linux-only Docker needs no worker endpoint.
+Explicit empty `SlotGroup.DockerProfile` preserves ordinary macOS behavior.
+Profiles add `docker` to discovery for their configured bases,
 including busy/warming/drained groups. Ordinary groups retain their original
 execution facts. Linux currently requires an Ubuntu 24.04 ARM64 base and a Docker
 profile. No shared Provider API fields or dependencies change.
@@ -50,8 +54,17 @@ On Orchard, macOS VMs request one `org.cirruslabs.tart-vms` slot and Linux VMs
 request zero; both still reserve their full CPU and memory. This allows two
 macOS Docker allocations on a worker advertising two macOS slots. Existing
 allocations keep their recorded reservations until reclaimed.
-Primary memory advertised to c2j reserves 512 MiB; an 8 GiB request does not fit
-an 8 GiB VM. Increase that slot's memory accordingly.
+Primary memory advertised to c2j reserves 512 MiB; the fixed 8 GiB VM supports
+job memory requests up to 7.5 GiB. Larger VM envelopes are currently unsupported.
+
+`Config.VMCounts` limits job VMs across all groups: macOS defaults to two, Linux
+to four, and total to their sum. Nil selects a default; `tart.VMCount(0)` disables
+that category. Companions and builders do not consume these job limits. They
+still consume real host CPU, memory and storage. All macOS instances, including
+builders, are subject to the separate two-instance physical ceiling. Idle warm
+job VMs reserve capacity; a request for another pool can retire idle capacity
+when the shared total is full. Active jobs and uncertain dispatches retain their
+reservations until cleanup.
 
 Use an IPv4 worker address and reserve a disjoint endpoint port range per provider
 owner on each worker. The

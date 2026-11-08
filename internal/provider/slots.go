@@ -343,6 +343,13 @@ func (p *Provider) reconcileSlots(ctx context.Context) error {
 		if t.spec.Image == "" {
 			continue
 		} // Prepare the shared base once first.
+		available, err := p.canStartVMs(ctx, t.spec)
+		if err != nil {
+			return err
+		}
+		if !available {
+			continue
+		}
 		probe := p.probesSources() && !fallback
 		if probe {
 			t.spec.Image = t.spec.Name

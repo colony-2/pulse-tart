@@ -1,6 +1,6 @@
 # pulse-tart
 
-A Go library implementing [`pulse-provider-api`](https://github.com/colony-2/pulse-provider-api) for ARM64 jobs through local Tart or Orchard. Ordinary slots run macOS; opt-in Docker slots support macOS with a private Linux companion or Linux directly. Pulse imports it and supplies complete job assignments. Configuration is a Go API; there is no provider CLI, plugin protocol, or configuration file.
+A Go library implementing [`pulse-provider-api`](https://github.com/colony-2/pulse-provider-api) for ARM64 jobs through local Tart or Orchard. Defaults support macOS jobs and Linux jobs with Docker. macOS Docker support adds a private Linux companion and is opt-in. Pulse imports the library and supplies complete job assignments. Configuration is a Go API; there is no provider CLI, plugin protocol, or configuration file.
 
 ## Images and jobs
 
@@ -20,12 +20,6 @@ Image names are stable and contain **no c2j version**. Existing images are reuse
 cfg := tart.Config{
     OwnerID: "mac-pool",
     StateDir: "/var/lib/pulse/macos", // private, durable, absolute path
-    Bases: tart.DefaultBases(),
-    C2JVersion: "latest", // optional; also accepts a release tag or commit
-    Slots: []tart.SlotGroup{
-        {Name: "standard", Count: 2, Base: "macos-26-arm64",
-         CPU: 4, MemoryMiB: 8192},
-    },
 }
 runtime, err := tart.NewTart(cfg, tart.TartConfig{})
 // Or use the same cfg with Orchard:
@@ -41,16 +35,55 @@ return runtime.Run(ctx)
 
 Import `tart "github.com/colony-2/pulse-tart"`. Constructors validate/copy configuration and lock the journal; they create no VMs. Drive `Run(ctx)` or call `Reconcile(ctx)` periodically. `Run` returns on cancellation or a reconciliation error; the application owns its retry policy. `Slots()` reports preparation and occupancy; `Images()` reports known prepared sources.
 
-Defaults are **4 vCPU and 8 GiB per slot**. Zero CPU/memory selects those defaults; zero count drains the group. Only one active or unresolved job uses a slot. Busy or warming slots return `no_capacity`, with no internal lease queue. Counts must fit the host's VM/resource limits; image preparation also needs a free VM position.
+Omitted configuration selects **two macOS job VMs and four Linux job VMs**, each
+with **4 vCPU / 8 GiB**. The bases are Tahoe (`macos-26-arm64`) and Ubuntu 24.04
+(`ubuntu-24.04-arm64`). Larger or smaller VM sizes are currently rejected.
 
-`DefaultBases()` supplies these digest-pinned, general-purpose images, without Xcode. It enables no slots automatically. The default SSH login is `admin`/`admin`; override credentials with a private image.
+Override any of the three job counts; omitted per-OS counts stay at 2 and 4,
+and an omitted total becomes their sum:
+
+```go
+cfg.VMCounts = tart.VMCounts{
+    MacOS: tart.VMCount(2), // maximum 2
+    Linux: tart.VMCount(4),
+    Total: tart.VMCount(3), // shared limit: at most three job VMs across both OSes
+}
+// tart.VMCount(0) disables an OS; Total: tart.VMCount(0) drains all job capacity.
+// nil means default. ResolveConfig(cfg) returns the effective configuration.
+```
+
+These counts include warming/idle job VMs and unresolved launch reservations,
+but **exclude Docker companions and image builders**. A macOS Docker job counts
+as one macOS job and one total job, regardless of its Linux companion. A separate
+physical limit counts every running/pending macOS VM, including builders and
+foreign VMs on the worker, and never admits a third macOS instance. Suspended and
+stopped source images do not count. Preparation waits for a free macOS position.
+
+Lower limits let active jobs finish and retire unused warm capacity. With a
+shared total smaller than the OS limits, a request can reclaim an idle worker
+of another OS; Pulse retries while the requested pool warms. There is no lease
+queue. Busy or warming slots return `no_capacity`.
+
+Counts do not automatically scale to host resources. Six default job VMs use
+24 vCPUs / 48 GiB before host overhead; two macOS Docker companions add another
+8 vCPUs / 16 GiB. Choose lower counts for smaller workers.
+
+Explicit `Bases` and `Slots` remain available for base selection. Without slots,
+the first configured base for each OS gets its conventional group (`standard`
+for macOS, `linux` for Linux). An explicit slot group's zero `Count` drains that
+group; its zero CPU/memory values resolve to 4 / 8192. Job limits apply across
+all groups. `C2JVersion` still defaults to `"latest"`.
+
+`DefaultBases()` supplies these digest-pinned macOS images, without Xcode.
+`DefaultLinuxBase()` supplies Ubuntu 24.04 ARM64. The default SSH login is
+`admin`/`admin`; override credentials with a private image.
 
 | Concrete base | Verified guest OS | Preference |
 | --- | --- | --- |
 | `macos-26-arm64` | Tahoe 26.6.2 | First |
 | `macos-15-arm64` | Sequoia 15.7.7 | Second |
 
-`GetCapabilities` advertises all configured bases in order, independent of current capacity. Selectors such as `macos-26*` or `macos-*arm64` match concrete names; `*` matches any sequence, other characters are literal, and matching is case-sensitive. All requested capabilities must match. Admission chooses the first configured base with a fitting available slot, then the smallest fitting slot. Add a separate slot group to enable another OS or size.
+`GetCapabilities` advertises all configured bases in order, independent of current capacity. Selectors such as `macos-26*` or `macos-*arm64` match concrete names; `*` matches any sequence, other characters are literal, and matching is case-sensitive. All requested capabilities must match. Admission chooses the first configured base with an available slot. Add an explicit slot group to enable another base; the two-macOS limit applies across all versions.
 
 ## Update images independently of Pulse
 
@@ -80,13 +113,15 @@ The library starts `c2j run with-lease --lease-file -`, passing the opaque lease
 
 Keep the durable journal for the owner scope's lifetime and reopen it with the same backend and owner. One runtime owns each state directory; use a distinct owner for each independent pool. Lost create responses retain reservations and are never blindly retried. Failed preparation remains inspectable through `Images()`/`Slots()` and backend events. Drain and purge known stopped sources before rebuilding a failed base. Identity mismatches are quarantined; never discard state to retry an uncertain launch.
 
-The updater may replace published source images. Job clones retain strict ownership checks and must not be modified externally. Never run a suspended source directly. VM age alone does not authorize cleanup of a zero-timeout worker. Linux guests are available only through the opt-in Docker configuration below. Positive runtime caps, start-before constraints, scratch reservations and shared host Nix volumes remain unsupported. Guest-local Nix stores benefit from Tart/APFS disk cloning without sharing a writable store.
+The updater may replace published source images. Job clones retain strict ownership checks and must not be modified externally. Never run a suspended source directly. VM age alone does not authorize cleanup of a zero-timeout worker. Linux guests use the integrated Docker environment, configured automatically by the defaults. Positive runtime caps, start-before constraints, scratch reservations and shared host Nix volumes remain unsupported. Guest-local Nix stores benefit from Tart/APFS disk cloning without sharing a writable store.
 
 Orchard requires configuration-preserving suspended clones and power-state updates. Use verified HTTPS and Basic auth; `CACert` accepts a custom CA and `AllowInsecureHTTP` enables lab HTTP. Guests require SSH and passwordless sudo. Direct Tart optionally pins `Base.SSHHostKey`; otherwise it trusts the managed guest endpoint. Protect the state directory and controller access: native delivery records contain leases even though public listings and fingerprint journals do not.
 
 ## Docker capability
 
-Docker is enabled per slot group using `Config.Docker` and
+The conventional Linux group includes Docker. To enable it for conventional
+macOS groups too, set `Docker: &tart.DockerConfig{}` and supply a worker
+`DockerEndpoint` in the backend options. Explicit groups use `Config.Docker` and
 `SlotGroup.DockerProfile`. The library prepares and verifies unused capacity
 before accepting a lease: one Linux VM for Linux jobs, or a fresh macOS clone
 plus a private Linux Engine. It tracks both native identities through handoff,
@@ -105,7 +140,7 @@ most two macOS VMs plus two Linux engines; run it alone. See the linked guide fo
 resource requirements, coverage and current validation status.
 For Orchard, use `./scripts/test-orchard-docker-qualification.sh` with the
 connection variables documented in the guide; the same VM limit applies.
-Docker remains opt-in. Both backends passed integration and concurrency,
+macOS Docker remains opt-in. Both backends passed integration and concurrency,
 recovery, pressure and isolation qualification by November 8, 2026. Orchard
 coverage includes API transport outage and endpoint recreation. Shared Orchard
 daemon termination and physical host power loss were not tested.

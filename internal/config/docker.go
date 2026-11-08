@@ -94,7 +94,7 @@ func normalizeDocker(c *Config) error {
 			if p.EngineVersion == "" {
 				p.EngineVersion = "29.1.3"
 			}
-			if p.CPU < 1 || p.CPU > 256 || p.MemoryMiB < 2048 || p.MemoryMiB > 1048576 || p.DiskGiB < 8 || p.DiskGiB > 1024 || !regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`).MatchString(p.EngineVersion) {
+			if p.CPU != DefaultCPU || p.MemoryMiB != DefaultMemoryMiB || p.DiskGiB < 8 || p.DiskGiB > 1024 || !regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`).MatchString(p.EngineVersion) {
 				return Err
 			}
 		}
@@ -119,6 +119,19 @@ func normalizeDocker(c *Config) error {
 		}
 	}
 	return nil
+}
+
+// NeedsDockerEndpoint is false for Linux-only Docker groups: their engine is
+// inside the job VM and requires no worker-side SSH bridge.
+func (c Config) NeedsDockerEndpoint() bool {
+	for _, g := range c.Slots {
+		for _, b := range c.Bases {
+			if g.Count > 0 && g.DockerProfile != "" && g.Base == b.Name && b.OS != "linux" {
+				return true
+			}
+		}
+	}
+	return false
 }
 func (c Config) Engine(name string) EngineProfile {
 	if c.Docker != nil {

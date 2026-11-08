@@ -31,6 +31,9 @@ type Provider struct {
 	Setup      func(context.Context) ([]byte, error)
 	BaseScript []byte
 	Assets     fs.FS
+	// A short-lived pool preparation hint, never a queued launch or lease.
+	preferredGroup string
+	preferUntil    time.Time
 }
 
 func New(c config.Settings, b Backend) (*Provider, error) {
@@ -166,12 +169,31 @@ func (p *Provider) Submit(ctx context.Context, ls []compute.Launch) ([]compute.S
 		if len(p.Config.Slots) > 0 {
 			spec, slotID, status = p.chooseSlot(ctx, l, spec, inventory)
 			if status != compute.Accepted {
+				if status == compute.NoCapacity {
+					if e := p.requestJobRoom(ctx, l); e != nil {
+						status = compute.Unavailable
+					}
+				}
 				out = append(out, result(l.LaunchID, status))
 				continue
 			}
 		}
+		available, e := p.canReserveJobs(ctx, spec)
+		if e != nil {
+			out = append(out, result(l.LaunchID, compute.Unavailable))
+			continue
+		}
+		if !available {
+			if e := p.requestJobRoom(ctx, l); e != nil {
+				out = append(out, result(l.LaunchID, compute.Unavailable))
+				continue
+			}
+			out = append(out, result(l.LaunchID, compute.NoCapacity))
+			continue
+		}
 		r := &Record{LaunchID: l.LaunchID, Fingerprint: hash, NativeHash: p.Store.hash(spec), Name: spec.Name, Job: l.Job, Created: time.Now().UTC(), Outcome: compute.Unknown, Phase: "dispatch", SlotID: slotID}
 		p.Store.data.Records[l.LaunchID] = r
+		p.preferredGroup = ""
 		if p.Store.save() != nil {
 			out = append(out, result(l.LaunchID, compute.Unknown))
 			continue

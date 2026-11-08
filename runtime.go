@@ -24,6 +24,7 @@ import (
 type Config = config.Config
 type Base = config.Base
 type SlotGroup = config.SlotGroup
+type VMCounts = config.VMCounts
 type OrchardConfig = config.Orchard
 type TartConfig = config.Tart
 type DockerConfig = config.Docker
@@ -35,6 +36,8 @@ type ImageStatus = engine.ImageStatus
 
 const DefaultCPU = config.DefaultCPU
 const DefaultMemoryMiB = config.DefaultMemoryMiB
+const DefaultMacOSVMCount = config.DefaultMacOSVMCount
+const DefaultLinuxVMCount = config.DefaultLinuxVMCount
 
 var ErrConfig = config.Err
 var ErrClosed = errors.New("provider closed")
@@ -55,11 +58,7 @@ type Runtime struct {
 }
 
 func prepare(c Config) (Config, error) {
-	c, e := config.Normalize(c)
-	if e != nil {
-		return c, e
-	}
-	return c, e
+	return ResolveConfig(c)
 }
 
 func newRuntime(p *engine.Provider, c Config) *Runtime {
@@ -91,7 +90,7 @@ func NewOrchard(c Config, connection OrchardConfig) (*Runtime, error) {
 	if !config.Name(connection.Worker) {
 		return nil, ErrConfig
 	}
-	if c.Docker != nil {
+	if c.NeedsDockerEndpoint() {
 		if e := connection.DockerEndpoint.Validate(); e != nil {
 			return nil, e
 		}
@@ -136,7 +135,7 @@ func NewTart(c Config, options TartConfig) (*Runtime, error) {
 		return nil, ErrConfig
 	}
 	options.Home = filepath.Clean(options.Home)
-	if c.Docker != nil {
+	if c.NeedsDockerEndpoint() {
 		if e := options.DockerEndpoint.Validate(); e != nil {
 			return nil, e
 		}

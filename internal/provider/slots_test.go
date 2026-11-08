@@ -339,27 +339,21 @@ func TestFailedTemplateHeldForInspection(t *testing.T) {
 	}
 }
 
-func TestMixedSlotSizesAndTemplateListing(t *testing.T) {
+func TestFixedSlotSizesAndTemplateListing(t *testing.T) {
 	p, f := slotsFixture(t, 2)
-	p.Config.Slots[0].Count = 1
-	p.Config.Slots = append(p.Config.Slots, config.SlotGroup{Name: "large", Count: 1, CPU: 8, MemoryMiB: 16384, Base: p.Config.Bases[0].Name})
-	if err := func() error { _, err := config.Normalize(p.Config.Config); return err }(); err != nil {
-		t.Fatal(err)
-	}
 	warmSlots(t, p)
 	large := launch("large")
 	large.CPUMillis = 6000
 	large.MemoryBytes = 12288 << 20
-	out, err := p.Submit(t.Context(), []compute.Launch{launch("small"), large})
-	if err != nil || out[0].Status != compute.Accepted || out[1].Status != compute.Accepted {
+	out, err := p.Submit(t.Context(), []compute.Launch{launch("first"), large, launch("second")})
+	if err != nil || out[0].Status != compute.Accepted || out[1].Status != compute.Unsupported || out[2].Status != compute.Accepted {
 		t.Fatal(out, err)
 	}
-	if p.Store.data.Records["small"].SlotID != "small-0001" || p.Store.data.Records["large"].SlotID != "large-0001" {
-		t.Fatal("incorrect size selection")
-	}
-	v := f.vms[p.Store.data.Records["large"].Name]
-	if v.CPU != 8 || v.Memory != 16384 {
-		t.Fatal("clone resized below template size")
+	for _, id := range []string{"first", "second"} {
+		v := f.vms[p.Store.data.Records[id].Name]
+		if v.CPU != 4 || v.Memory != 8192 {
+			t.Fatal("clone resized below template size")
+		}
 	}
 	page, err := p.List(t.Context(), compute.ListRequest{})
 	if err != nil || len(page.Items) != 2 {
@@ -373,7 +367,7 @@ func TestBasePreferenceAndAdmission(t *testing.T) {
 		busy, constrained bool
 		want              string
 	}{
-		{name: "preference before size", selector: "macos**", want: "preferred"},
+		{name: "configured preference", selector: "macos**", want: "preferred"},
 		{name: "explicit selector", selector: "macos-secondary", want: "secondary"},
 		{name: "busy preferred base", selector: "macos-*", busy: true, want: "secondary"},
 		{name: "required capability", selector: "macos-*", constrained: true, want: "secondary"},
@@ -388,7 +382,7 @@ func TestBasePreferenceAndAdmission(t *testing.T) {
 			second.Capabilities = []string{"nix", "git"}
 			p.Config.Bases = []config.Base{first, second}
 			p.Config.Slots = []config.SlotGroup{
-				{Name: "preferred", Count: 1, Base: first.Name, CPU: 8, MemoryMiB: 16384},
+				{Name: "preferred", Count: 1, Base: first.Name, CPU: 4, MemoryMiB: 8192},
 				{Name: "secondary", Count: 1, Base: second.Name, CPU: 4, MemoryMiB: 8192},
 			}
 			if err := p.Reconcile(t.Context()); err != nil {

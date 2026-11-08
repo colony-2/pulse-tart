@@ -11,10 +11,12 @@ func ExampleConfig() {
 	// credentials and paths through its own configuration mechanism.
 	cfg := tart.Config{
 		OwnerID: "pulse-macos", StateDir: "/var/lib/pulse/macos",
-		Bases: tart.DefaultBases(),
-		Slots: []tart.SlotGroup{{Name: "tahoe", Count: 2, Base: "macos-26-arm64"}},
 	}
-	fmt.Println(cfg.Slots[0].Count, tart.DefaultCPU, tart.DefaultMemoryMiB)
+	resolved, err := tart.ResolveConfig(cfg)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(*resolved.VMCounts.MacOS, *resolved.VMCounts.Linux, *resolved.VMCounts.Total, tart.DefaultCPU, tart.DefaultMemoryMiB)
 	var _ api.Provider = (*tart.Runtime)(nil)
-	// Output: 2 4 8192
+	// Output: 2 4 6 4 8192
 }

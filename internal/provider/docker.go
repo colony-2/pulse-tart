@@ -345,6 +345,25 @@ func (p *Provider) reconcilePairs(ctx context.Context) error {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
+	// Lower limits retire idle workers before accepting more work. Active jobs
+	// keep their reservations until cleanup, even if the new limit is smaller.
+	if !p.fitsJobCounts(p.jobReservations()) {
+		for _, id := range ids {
+			if p.Store.data.Pairs[id].Phase == "reclaiming" {
+				if e := p.reclaimPair(ctx, p.Store.data.Pairs[id]); e != nil {
+					return e
+				}
+				return nil
+			}
+		}
+		for _, id := range ids {
+			pair := p.Store.data.Pairs[id]
+			if pair.LaunchID == "" && pair.Phase != "gone" && pair.Phase != "quarantine" {
+				pair.Phase = "reclaiming"
+				return p.Store.save()
+			}
+		}
+	}
 	for _, id := range ids {
 		pair := p.Store.data.Pairs[id]
 		if pair.Phase == "gone" || pair.Phase == "quarantine" {
@@ -366,6 +385,13 @@ func (p *Provider) reconcilePairs(ctx context.Context) error {
 			continue
 		}
 		if pair.Phase == "reserved" {
+			available, e := p.canStartVMs(ctx)
+			if e != nil {
+				return e
+			}
+			if !available {
+				continue
+			}
 			primary := pair.Engine.Name == ""
 			spec := pair.Engine
 			if primary {
@@ -430,6 +456,13 @@ func (p *Provider) reconcilePairs(ctx context.Context) error {
 					return e
 				}
 				if !ready {
+					continue
+				}
+				available, e := p.canStartVMs(ctx)
+				if e != nil {
+					return e
+				}
+				if !available {
 					continue
 				}
 				pair.Phase = "primary-dispatch"
@@ -502,6 +535,9 @@ func (p *Provider) reconcilePairs(ctx context.Context) error {
 		}
 	}
 	for _, g := range p.Config.Slots {
+		if p.preferredGroup != "" && time.Now().Before(p.preferUntil) && g.Name != p.preferredGroup {
+			continue
+		}
 		if g.DockerProfile == "" {
 			continue
 		}
@@ -530,6 +566,13 @@ func (p *Provider) reconcilePairs(ctx context.Context) error {
 			if pair == nil {
 				continue
 			}
+			available, e := p.canReserveJobs(ctx, pair.Primary)
+			if e != nil {
+				return e
+			}
+			if !available {
+				continue
+			}
 			p.Store.data.Pairs[pair.ID] = pair
 			return p.Store.save()
 		}
@@ -553,6 +596,9 @@ func (p *Provider) submitDocker(ctx context.Context, l api.Launch, hash string) 
 	}
 	if !compatible || l.TimeoutSeconds != 0 || l.StartBefore != nil || l.ScratchBytes != 0 {
 		return result(l.LaunchID, api.Unsupported), true
+	}
+	if !p.fitsJobCounts(p.jobReservations()) {
+		return result(l.LaunchID, api.NoCapacity), true
 	}
 	// Preserve configured base preference; stable smallest fitting slot within it.
 	candidates := []*PairRecord{}
@@ -615,6 +661,7 @@ func (p *Provider) submitDocker(ctx context.Context, l api.Launch, hash string) 
 		pair.Phase = "handoff-intent"
 		r := &Record{LaunchID: l.LaunchID, Fingerprint: hash, Name: pair.Primary.Name, UID: pair.PrimaryUID, NativeHash: pair.PrimaryHash, Job: l.Job, Created: time.Now().UTC(), Outcome: api.Unknown, Phase: "dispatch", SlotID: pair.SlotID, PairID: pair.ID}
 		p.Store.data.Records[l.LaunchID] = r
+		p.preferredGroup = ""
 		if p.Store.save() != nil {
 			return result(l.LaunchID, api.Unknown), true
 		}
@@ -633,6 +680,9 @@ func (p *Provider) submitDocker(ctx context.Context, l api.Launch, hash string) 
 			return result(l.LaunchID, api.Unknown), true
 		}
 		return result(l.LaunchID, r.Outcome), true
+	}
+	if err := p.requestJobRoom(ctx, l); err != nil {
+		return result(l.LaunchID, api.Unavailable), true
 	}
 	return result(l.LaunchID, api.NoCapacity), true
 }

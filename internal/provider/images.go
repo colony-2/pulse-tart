@@ -21,6 +21,7 @@ type ImageRecord struct {
 	Worker     string    `json:"worker"`
 	Probe      bool      `json:"probe,omitempty"`
 	Kind       string    `json:"kind"`
+	OS         string    `json:"os,omitempty"`
 	Created    time.Time `json:"created"`
 }
 
@@ -194,12 +195,19 @@ func (p *Provider) reconcileImages(ctx context.Context) error {
 				if err := p.retain(ctx, name, existing.UID); err != nil {
 					return err
 				}
-				p.Store.data.Images[name] = &ImageRecord{Name: name, UID: existing.UID, NativeHash: p.Store.hash(normalized(existing.Spec)), Phase: "ready", LocalName: existing.LocalName, Worker: p.Config.Worker, Kind: "base", Created: time.Now().UTC()}
+				p.Store.data.Images[name] = &ImageRecord{Name: name, UID: existing.UID, NativeHash: p.Store.hash(normalized(existing.Spec)), Phase: "ready", LocalName: existing.LocalName, Worker: p.Config.Worker, Kind: "base", OS: base.OS, Created: time.Now().UTC()}
 				continue
 			}
 			if !backend.IsStatus(err, 404) {
 				return err
 			}
+		}
+		available, err := p.canStartVMs(ctx, spec)
+		if err != nil {
+			return err
+		}
+		if !available {
+			continue
 		}
 		var setup []byte
 		if probe {
@@ -219,7 +227,7 @@ func (p *Provider) reconcileImages(ctx context.Context) error {
 			spec.StartupScript.Content = strings.ReplaceAll(spec.StartupScript.Content, "/usr/bin/base64 -D", "/usr/bin/base64 -d")
 			spec.StartupScript.Content = strings.ReplaceAll(spec.StartupScript.Content, "prepare-base.sh", "prepare-base-linux.sh")
 		}
-		r = &ImageRecord{Name: name, Phase: "dispatch", Probe: probe, Kind: "base", NativeHash: p.Store.hash(spec), Worker: p.Config.Worker, Created: time.Now().UTC()}
+		r = &ImageRecord{Name: name, Phase: "dispatch", Probe: probe, Kind: "base", OS: base.OS, NativeHash: p.Store.hash(spec), Worker: p.Config.Worker, Created: time.Now().UTC()}
 		p.Store.data.Images[name] = r
 		if err := p.Store.save(); err != nil {
 			return err
