@@ -46,6 +46,10 @@ host disk-space reservation: provision enough worker storage for all configured
 slots, source images, Nix stores and guest OS overhead. Count two running VMs,
 eight CPUs and 16 GiB per macOS Docker allocation. A Linux allocation uses only
 its primary VM. Companion resources never inflate primary execution facts.
+On Orchard, macOS VMs request one `org.cirruslabs.tart-vms` slot and Linux VMs
+request zero; both still reserve their full CPU and memory. This allows two
+macOS Docker allocations on a worker advertising two macOS slots. Existing
+allocations keep their recorded reservations until reclaimed.
 Primary memory advertised to c2j reserves 512 MiB; an 8 GiB request does not fit
 an 8 GiB VM. Increase that slot's memory accordingly.
 
@@ -206,6 +210,46 @@ and qualification report were independently verified against the archived
 evidence. No further run is required for this planned native matrix.
 
 This result covers the listed native worker scenarios; physical host power loss
-and Orchard fault behavior were not tested. The basic library script remains useful
+was not tested. The basic library script remains useful
 for routine integration: no arguments selects Linux and macOS; `tart darwin`
 selects macOS only. There is no need to run both forms to qualify one revision.
+
+Run the corresponding Orchard matrix from any machine with Go, Python and
+network access to the controller:
+
+```sh
+PULSE_TEST_ORCHARD_URL=http://192.168.1.195:6120 \
+PULSE_TEST_ORCHARD_WORKER=jnmac25.local \
+PULSE_TEST_ENGINE_WORKER_ADDRESS=192.168.64.1 \
+./scripts/test-orchard-docker-qualification.sh
+```
+
+The endpoint address must be reachable from the guests. Authenticated controllers
+can use `PULSE_TEST_ORCHARD_USERNAME` and `PULSE_TEST_ORCHARD_TOKEN`. Run on an idle
+worker with at least 16 CPU cores, 32 GiB memory plus host overhead, and two macOS
+slots. The same two-macOS-VM limit, private 8 GiB engine disks and three generations
+apply. The host-local launchd preflight is specific to the native script.
+
+Orchard requires thirteen stages. It replaces the native host endpoint SIGKILL
+with withdrawal of an owned Orchard endpoint, observed loss of connectivity,
+and reconciliation restoring the original port. It also injects a 30-second API
+transport outage into the provider: an independent observer must see guest jobs
+continue, failed inventory calls must leave the journal unchanged, and recovery
+must accept duplicate submissions without another claim. The separate provider
+controller process is killed just as in the native matrix. These tests do not
+terminate the shared Orchard controller or worker daemons or power off the host.
+
+The Orchard qualification passed on November 8, 2026 in
+`20261108T031434Z-orchard-docker-qualification-17477`. The live test took
+1,090.22 seconds (about 18 minutes). All thirteen stages passed, with four
+completed JobDB jobs, six distinct allocation identities, distinct concurrent
+MAC addresses, and a peak of two running macOS VMs. Both macOS/Linux pairs ran
+concurrently with the corrected Linux slot accounting. The Go race suite and
+42 Python tests passed in the frozen run; the final regression suite passed
+44 Python tests, Go race tests, vet and Darwin ARM64 compilation.
+
+The archive's 144 source hashes and report were independently verified. Orchard
+reported no remaining VMs after cleanup. No further run is required for this
+planned Orchard matrix; the shared daemon and physical power-loss scenarios
+above remain outside its scope. Exact evidence paths and checks are recorded in
+[`docker-library-results.json`](docker-library-results.json).

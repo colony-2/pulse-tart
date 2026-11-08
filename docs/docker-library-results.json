@@ -121,7 +121,7 @@
     }
   ],
   "qualification_script": "scripts/test-macos-docker-qualification.sh",
-  "qualification_status": "native planned matrix passed; Orchard fault qualification not run",
+  "qualification_status": "native and Orchard planned matrices passed",
   "remaining_native_live_gates": [],
   "native_qualification": {
     "result": "passed",
@@ -152,5 +152,43 @@
       "process and VM loss; physical host power loss is not injected",
       "one native macOS worker; Orchard fault behavior is not certified by this run"
     ]
+  },
+  "orchard_qualification_script": "scripts/test-orchard-docker-qualification.sh",
+  "remaining_orchard_live_gates": [],
+  "orchard_qualification": {
+    "scope": "orchard-production-docker-qualification",
+    "result": "passed",
+    "checks": {
+      "concurrent_jobs": true,
+      "controller_sigkill_replay": true,
+      "guest_relay_sigkill": true,
+      "docker_daemon_sigkill": true,
+      "cpu_memory_pressure": true,
+      "private_disk_enospc": true,
+      "prune_isolation": true,
+      "successful_pair_cleanup": true,
+      "primary_vm_loss": true,
+      "engine_vm_loss": true,
+      "fresh_generation_after_faults": true,
+      "orchard_api_outage": true,
+      "orchard_endpoint_recreation": true
+    },
+    "distinct_allocation_identities": true,
+    "distinct_concurrent_macs": true,
+    "completed_jobdb_jobs": 4,
+    "jobdb_valid": true,
+    "peak_observed_running_macos": 2,
+    "limits": [
+      "bounded container CPU/memory and 8 GiB engine filesystem pressure",
+      "process and VM loss; physical host power loss is not injected",
+      "one Orchard worker; API transport outage and endpoint withdrawal/recreation; shared Orchard daemons are not killed"
+    ],
+    "archive": "test-results/20261108T031434Z-orchard-docker-qualification-17477.tar.gz",
+    "source_snapshot": "test-results/20261108T031434Z-orchard-docker-qualification-17477/source-sha256.json",
+    "live_test_duration_seconds": 1090.22,
+    "worker": "jnmac25.local",
+    "orchard_reported_version": "unknown",
+    "verified_archived_source_hashes": 144,
+    "remaining_api_vms_after_cleanup": 0
   }
 }

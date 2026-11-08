@@ -103,9 +103,12 @@ For native concurrency, fault recovery, pressure and isolation qualification, ru
 `./scripts/test-macos-docker-qualification.sh` once with no arguments. It uses at
 most two macOS VMs plus two Linux engines; run it alone. See the linked guide for
 resource requirements, coverage and current validation status.
-Docker remains opt-in. The native integration and concurrency/fault/pressure
-matrix passed on November 8, 2026; Orchard's basic integrations also passed.
-Orchard-specific fault qualification and physical host power loss were not tested.
+For Orchard, use `./scripts/test-orchard-docker-qualification.sh` with the
+connection variables documented in the guide; the same VM limit applies.
+Docker remains opt-in. Both backends passed integration and concurrency,
+recovery, pressure and isolation qualification by November 8, 2026. Orchard
+coverage includes API transport outage and endpoint recreation. Shared Orchard
+daemon termination and physical host power loss were not tested.
 
 ## Test and debug
 

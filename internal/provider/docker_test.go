@@ -373,3 +373,33 @@ func TestDockerPoolGrowthKeepsExistingReadyAllocation(t *testing.T) {
 		t.Fatal("existing capacity lost on growth", out, e)
 	}
 }
+
+func TestDockerCompanionsDoNotConsumeMacOSSlots(t *testing.T) {
+	for _, linux := range []bool{false, true} {
+		p, _ := dockerFixture(t, linux)
+		pair := readyDocker(t, p)
+		specs := []backend.Spec{pair.Primary}
+		if !linux {
+			specs = append(specs, pair.Engine)
+		}
+		var macSlots, cpu, memory int64
+		for _, spec := range specs {
+			want := int64(1)
+			if spec.OS == "linux" {
+				want = 0
+			}
+			if spec.Resources["org.cirruslabs.tart-vms"] != want {
+				t.Fatal("incorrect macOS reservation", spec.OS, spec.Resources)
+			}
+			if spec.Resources["org.cirruslabs.logical-cores"] != spec.CPU || spec.Resources["org.cirruslabs.memory-mib"] != spec.Memory {
+				t.Fatal("lost CPU/memory accounting")
+			}
+			macSlots += spec.Resources["org.cirruslabs.tart-vms"]
+			cpu += spec.CPU
+			memory += spec.Memory
+		}
+		if !linux && (macSlots*2 != 2 || cpu*2 != 16 || memory*2 != 32768) {
+			t.Fatal("two pairs cannot fit default worker reservations", macSlots, cpu, memory)
+		}
+	}
+}

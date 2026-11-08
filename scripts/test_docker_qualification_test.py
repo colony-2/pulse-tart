@@ -29,14 +29,27 @@ class QualificationReport(unittest.TestCase):
             identity['mac'] = '00:11:22:33:44:0' + str(i % 2)
         self.jobs = [{'status': 'COMPLETED', 'output_ok': True, 'claims': 1, 'renewals': 3, 'secret_calls': 1} for _ in range(4)]
 
-    def result(self, exit_code=0):
+    def result(self, exit_code=0, backend="tart"):
         (self.root / 'qualification.json').write_text(json.dumps(self.evidence))
         (self.root / 'tests.jsonl').write_text('\n'.join(map(json.dumps, self.events)))
         for p in self.root.glob('jobdb-*.json'):
             p.unlink()
         for i, j in enumerate(self.jobs):
             (self.root / f'jobdb-{i}.json').write_text(json.dumps(j))
-        return report.summarize(self.root, exit_code)['result']
+        return report.summarize(self.root, exit_code, backend)['result']
+
+    def test_orchard_requires_its_own_fault_evidence(self):
+        self.assertEqual(self.result(backend='orchard'), 'incomplete')
+        self.evidence['backend'] = 'orchard'
+        self.evidence['checks']['orchard_api_outage'] = True
+        self.evidence['checks']['orchard_endpoint_recreation'] = True
+        del self.evidence['checks']['worker_endpoint_sigkill']
+        self.assertEqual(self.result(backend='orchard'), 'passed')
+        self.assertEqual(self.result(backend='tart'), 'incomplete')
+        for key in ('orchard_api_outage', 'orchard_endpoint_recreation'):
+            self.evidence['checks'][key] = False
+            self.assertEqual(self.result(backend='orchard'), 'incomplete')
+            self.evidence['checks'][key] = True
 
     def test_complete_evidence(self):
         self.assertEqual(self.result(), 'passed')

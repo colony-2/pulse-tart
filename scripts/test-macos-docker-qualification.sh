@@ -15,7 +15,7 @@ python3 scripts/test-report.py snapshot "$out"
 { date -u; git rev-parse HEAD; go version; tart --version; uname -sm; } > "$out/environment.log" 2>&1
 printf 'Docker qualification: at most two macOS VMs plus two Linux VMs / 16 vCPUs / 32 GiB.\nAllow 30–60 minutes plus downloads (100-minute test limit). Do not run another VM suite concurrently.\nLogs: %s\n' "$relative"
 cd "$out/source"
-export GOWORK=off PULSE_TEST_OUTPUT_DIR="$out"
+export GOWORK=off PULSE_TEST_OUTPUT_DIR="$out" PULSE_TEST_QUALIFICATION_BACKEND=tart
 unset PULSE_TEST_BACKEND PULSE_TEST_DOCKER_LIBRARY PULSE_TEST_DOCKER_QUALIFICATION PULSE_TEST_DOCKER_ENDPOINT PULSE_QUALIFICATION_CONTROLLER
 status=0
 # Keep evidence/archives even when a host precondition fails. Do not stop others' VMs.

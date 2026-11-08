@@ -17,6 +17,7 @@ import (
 
 	api "github.com/colony-2/pulse-provider-api"
 	"github.com/colony-2/pulse-tart/internal/backend"
+	orchardbackend "github.com/colony-2/pulse-tart/internal/orchard"
 	native "github.com/colony-2/pulse-tart/internal/tart"
 )
 
@@ -47,6 +48,62 @@ func (b *qualificationBackend) Create(ctx context.Context, spec backend.Spec) (b
 	return b.Client.Create(ctx, spec)
 }
 
+func (b *qualificationBackend) LimitError() error { return b.limitError }
+
+type qualificationOrchardBackend struct {
+	*orchardbackend.Client
+	worker     string
+	limitError error
+}
+
+func (b *qualificationOrchardBackend) LimitError() error { return b.limitError }
+func (b *qualificationOrchardBackend) Create(ctx context.Context, spec backend.Spec) (backend.VM, error) {
+	if spec.OS != "linux" {
+		vms, err := b.List(ctx)
+		if err != nil {
+			return backend.VM{}, err
+		}
+		running := 0
+		for _, v := range vms {
+			if (v.Worker == b.worker || v.Labels["org.cirruslabs.orchard.worker-name"] == b.worker) && v.OS != "linux" && !v.Stopped() {
+				running++
+			}
+		}
+		if running >= 2 {
+			b.limitError = fmt.Errorf("qualification refuses a third running macOS VM")
+			return backend.VM{}, b.limitError
+		}
+	}
+	return b.Client.Create(ctx, spec)
+}
+
+type qualificationControllerConfig struct {
+	Kind       string
+	Config     Config
+	Options    TartConfig
+	Connection OrchardConfig
+}
+
+func newQualificationRuntime(input qualificationControllerConfig) (*Runtime, error) {
+	var r *Runtime
+	var err error
+	if input.Kind == "orchard" {
+		r, err = NewOrchard(input.Config, input.Connection)
+		if err == nil {
+			r.p.Backend = &qualificationOrchardBackend{Client: r.p.Backend.(*orchardbackend.Client), worker: input.Connection.Worker}
+		}
+	} else {
+		r, err = NewTart(input.Config, input.Options)
+		if err == nil {
+			r.p.Backend = &qualificationBackend{Client: r.p.Backend.(*native.Client)}
+		}
+	}
+	if err == nil {
+		r.profile = "docker-integration"
+	}
+	return r, err
+}
+
 type qualificationOps interface {
 	Exec(context.Context, string, string, []byte) ([]byte, error)
 	Stop(context.Context, string, string) error
@@ -56,6 +113,8 @@ type qualification struct {
 	ctx        context.Context
 	cfg        Config
 	options    TartConfig
+	kind       string
+	connection OrchardConfig
 	r          *Runtime
 	report     *liveReport
 	checks     map[string]bool
@@ -65,12 +124,10 @@ type qualification struct {
 
 func (q *qualification) open() {
 	q.t.Helper()
-	r, err := NewTart(q.cfg, q.options)
+	r, err := newQualificationRuntime(qualificationControllerConfig{q.kind, q.cfg, q.options, q.connection})
 	if err != nil {
 		q.t.Fatal(err)
 	}
-	r.profile = "docker-integration"
-	r.p.Backend = &qualificationBackend{Client: r.p.Backend.(*native.Client)}
 	q.r = r
 }
 func (q *qualification) reopen(count int) {
@@ -103,7 +160,7 @@ func (q *qualification) run(p DockerStatus, engine bool, script string) string {
 func (q *qualification) checkpoint(name string) {
 	q.t.Helper()
 	q.checks[name] = true
-	q.report.write(q.t, "qualification.json", map[string]any{"checks": q.checks, "identities": q.identities, "peak_running_macos": q.peakMac})
+	q.report.write(q.t, "qualification.json", map[string]any{"backend": q.kind, "checks": q.checks, "identities": q.identities, "peak_running_macos": q.peakMac})
 	q.t.Log("qualification passed:", name)
 }
 func (q *qualification) reconcile(ctx context.Context) {
@@ -111,7 +168,7 @@ func (q *qualification) reconcile(ctx context.Context) {
 	if err := q.r.Reconcile(ctx); err != nil {
 		q.t.Log("reconcile:", err)
 	}
-	if err := q.r.p.Backend.(*qualificationBackend).limitError; err != nil {
+	if err := q.r.p.Backend.(interface{ LimitError() error }).LimitError(); err != nil {
 		q.t.Fatal(err)
 	}
 	vms, err := q.r.p.Backend.List(ctx)
@@ -120,6 +177,9 @@ func (q *qualification) reconcile(ctx context.Context) {
 	}
 	mac := 0
 	for _, v := range vms {
+		if q.kind == "orchard" && v.Worker != q.connection.Worker && v.Labels["org.cirruslabs.orchard.worker-name"] != q.connection.Worker {
+			continue
+		}
 		if v.OS != "linux" && !v.Stopped() {
 			mac++
 		}
@@ -295,10 +355,7 @@ func TestDockerQualificationController(t *testing.T) {
 	if path == "" {
 		t.Skip("qualification subprocess only")
 	}
-	var input struct {
-		Config  Config
-		Options TartConfig
-	}
+	var input qualificationControllerConfig
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -306,13 +363,11 @@ func TestDockerQualificationController(t *testing.T) {
 	if err = json.Unmarshal(data, &input); err != nil {
 		t.Fatal(err)
 	}
-	r, err := NewTart(input.Config, input.Options)
+	r, err := newQualificationRuntime(input)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.Close()
-	r.profile = "docker-integration"
-	r.p.Backend = &qualificationBackend{Client: r.p.Backend.(*native.Client)}
 	if err = r.Reconcile(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -325,10 +380,7 @@ func TestDockerQualificationController(t *testing.T) {
 func (q *qualification) controllerCrash(launches []api.Launch) {
 	q.t.Helper()
 	path := filepath.Join(q.cfg.StateDir, "controller-input.json")
-	input, _ := json.Marshal(struct {
-		Config  Config
-		Options TartConfig
-	}{q.cfg, q.options})
+	input, _ := json.Marshal(qualificationControllerConfig{q.kind, q.cfg, q.options, q.connection})
 	if err := os.WriteFile(path, input, 0600); err != nil {
 		q.t.Fatal(err)
 	}
@@ -449,6 +501,9 @@ func (q *qualification) assertGone(pairs []DockerStatus) {
 			}
 		}
 	}
+	if q.kind == "orchard" {
+		return
+	}
 	// Native helper must be booted out and its allocation directory removed.
 	for _, p := range pairs {
 		if _, err := os.Stat(filepath.Join(q.cfg.StateDir, "native", "endpoints", p.EngineUID)); !os.IsNotExist(err) {
@@ -460,7 +515,7 @@ func (q *qualification) cleanup() {
 	q.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	q.report.capture(q.t, ctx, "tart", OrchardConfig{}, q.r, q.cfg.StateDir)
+	q.report.capture(q.t, ctx, q.kind, q.connection, q.r, q.cfg.StateDir)
 	// Only this test's UID-verified disposable allocations may be stopped on failure.
 	pairs, _ := q.r.DockerAllocations()
 	for _, p := range pairs {
@@ -502,7 +557,14 @@ func TestLiveDockerQualification(t *testing.T) {
 	if os.Getenv("PULSE_TEST_DOCKER_QUALIFICATION") != "1" {
 		t.Skip("use scripts/test-macos-docker-qualification.sh")
 	}
-	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
+	kind := os.Getenv("PULSE_TEST_QUALIFICATION_BACKEND")
+	if kind == "" {
+		kind = "tart"
+	}
+	if kind != "tart" && kind != "orchard" {
+		t.Fatal("invalid qualification backend")
+	}
+	if kind == "tart" && (runtime.GOOS != "darwin" || runtime.GOARCH != "arm64") {
 		t.Fatal("native qualification requires Apple Silicon macOS")
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Minute)
@@ -515,6 +577,8 @@ func TestLiveDockerQualification(t *testing.T) {
 	engine.DiskGiB = 8
 	base := DefaultBases()[0]
 	q := &qualification{t: t, ctx: ctx, report: newLiveReport(t, string(base.SSHPassword)), checks: map[string]bool{}, cfg: Config{OwnerID: fmt.Sprintf("docker-qualification-%d", time.Now().UnixNano()), StateDir: dir, Bases: []Base{base}, C2JVersion: os.Getenv("PULSE_TEST_C2J_VERSION"), Slots: []SlotGroup{{Name: "standard", Base: base.Name, Count: 2, DockerProfile: "standard"}}, Docker: &DockerConfig{Profiles: []DockerEngineProfile{engine}}}, options: TartConfig{Home: os.Getenv("PULSE_TEST_TART_HOME"), DockerEndpoint: DockerEndpoint{Address: os.Getenv("PULSE_TEST_ENGINE_WORKER_ADDRESS"), PortMin: 45200, PortMax: 45201}}}
+	q.kind = kind
+	q.connection = OrchardConfig{URL: os.Getenv("PULSE_TEST_ORCHARD_URL"), Worker: os.Getenv("PULSE_TEST_ORCHARD_WORKER"), Username: os.Getenv("PULSE_TEST_ORCHARD_USERNAME"), Token: Secret(os.Getenv("PULSE_TEST_ORCHARD_TOKEN")), AllowInsecureHTTP: true, DockerEndpoint: q.options.DockerEndpoint}
 	q.open()
 	defer q.cleanup()
 	t.Log("private recovery state:", dir)
@@ -535,14 +599,19 @@ func TestLiveDockerQualification(t *testing.T) {
 		t.Fatal("relay process was not restarted")
 	}
 	q.checkpoint("guest_relay_sigkill")
-	// The worker endpoint service must also survive an abrupt process death.
-	label := "user/" + strconv.Itoa(os.Getuid()) + "/dev.pulse-tart.engine." + a.EngineUID
-	if out, err := exec.CommandContext(ctx, "/bin/launchctl", "kill", "SIGKILL", label).CombinedOutput(); err != nil {
-		t.Fatalf("endpoint kill: %v %s", err, out)
+	if q.kind == "orchard" {
+		q.orchardAPIOutage(pairs, launches)
+		q.orchardEndpointRecovery(a, b)
+	} else {
+		// The worker endpoint service must also survive an abrupt process death.
+		label := "user/" + strconv.Itoa(os.Getuid()) + "/dev.pulse-tart.engine." + a.EngineUID
+		if out, err := exec.CommandContext(ctx, "/bin/launchctl", "kill", "SIGKILL", label).CombinedOutput(); err != nil {
+			t.Fatalf("endpoint kill: %v %s", err, out)
+		}
+		q.healthy(a)
+		q.healthy(b)
+		q.checkpoint("worker_endpoint_sigkill")
 	}
-	q.healthy(a)
-	q.healthy(b)
-	q.checkpoint("worker_endpoint_sigkill")
 	q.run(a, true, "sudo -n systemctl kill --kill-whom=main --signal=SIGKILL docker.service\nsudo -n systemctl restart docker.service")
 	q.healthy(a)
 	q.healthy(b)
