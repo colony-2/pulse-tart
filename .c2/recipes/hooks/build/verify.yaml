@@ -1,0 +1,114 @@
+id: pulse-tart-native-verify
+inputs:
+  candidate: ${{ inputs.?candidate.orValue('') }}
+  base: ${{ inputs.?base.orValue('') }}
+sequence:
+- id: formatting
+  op: command_execution
+  const: true
+  execution_needs:
+    packages:
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#go_1_26
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#stdenv.cc
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#bash
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#python3
+  inputs:
+    timeout: 65m
+    env:
+      OUTBOX: ${{ context.environment.op.outbox }}
+      INBOX: ${{ context.environment.op.inbox }}
+      CANDIDATE: ${{ inputs.candidate }}
+      BASE: ${{ inputs.base }}
+    run: python3 .c2/recipes/hooks/build/native_verify.py formatting
+- id: race
+  op: command_execution
+  const: true
+  execution_needs:
+    packages:
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#go_1_26
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#stdenv.cc
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#bash
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#python3
+  inputs:
+    timeout: 65m
+    env:
+      OUTBOX: ${{ context.environment.op.outbox }}
+      INBOX: ${{ context.environment.op.inbox }}
+      CANDIDATE: ${{ inputs.candidate }}
+      BASE: ${{ inputs.base }}
+    run: python3 .c2/recipes/hooks/build/native_verify.py race
+- id: vet_shell
+  op: command_execution
+  const: true
+  execution_needs:
+    packages:
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#go_1_26
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#stdenv.cc
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#bash
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#python3
+  inputs:
+    timeout: 65m
+    env:
+      OUTBOX: ${{ context.environment.op.outbox }}
+      INBOX: ${{ context.environment.op.inbox }}
+      CANDIDATE: ${{ inputs.candidate }}
+      BASE: ${{ inputs.base }}
+    run: python3 .c2/recipes/hooks/build/native_verify.py vet-shell
+- id: build
+  op: command_execution
+  const: true
+  execution_needs:
+    packages:
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#go_1_26
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#stdenv.cc
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#bash
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#python3
+  inputs:
+    timeout: 65m
+    env:
+      OUTBOX: ${{ context.environment.op.outbox }}
+      INBOX: ${{ context.environment.op.inbox }}
+      CANDIDATE: ${{ inputs.candidate }}
+      BASE: ${{ inputs.base }}
+    run: python3 .c2/recipes/hooks/build/native_verify.py build
+- id: aggregate
+  op: command_execution
+  const: true
+  execution_needs:
+    packages:
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#go_1_26
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#stdenv.cc
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#bash
+    - nix:github:NixOS/nixpkgs/a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf#python3
+  artifacts:
+    formatting.log: ${{ sequence.formatting.artifacts['formatting.log'] }}
+    formatting.json: ${{ sequence.formatting.artifacts['formatting.json'] }}
+    race.log: ${{ sequence.race.artifacts['race.log'] }}
+    race.json: ${{ sequence.race.artifacts['race.json'] }}
+    vet-shell.log: ${{ sequence.vet_shell.artifacts['vet-shell.log'] }}
+    vet-shell.json: ${{ sequence.vet_shell.artifacts['vet-shell.json'] }}
+    build.log: ${{ sequence.build.artifacts['build.log'] }}
+    build.json: ${{ sequence.build.artifacts['build.json'] }}
+  inputs:
+    timeout: 65m
+    env:
+      OUTBOX: ${{ context.environment.op.outbox }}
+      INBOX: ${{ context.environment.op.inbox }}
+      CANDIDATE: ${{ inputs.candidate }}
+      BASE: ${{ inputs.base }}
+    run: python3 .c2/recipes/hooks/build/native_verify.py aggregate
+outputs:
+  api_version: c2.build-hook/v1
+  status: ${{ sequence.aggregate.outputs.stdout }}
+  summary: Native formatting, race tests, vet/shell syntax and build completed; inspect verification.md and individual logs.
+  artifact_refs:
+    formatting.log: ${{ sequence.formatting.artifacts['formatting.log'] }}
+    formatting.json: ${{ sequence.formatting.artifacts['formatting.json'] }}
+    race.log: ${{ sequence.race.artifacts['race.log'] }}
+    race.json: ${{ sequence.race.artifacts['race.json'] }}
+    vet-shell.log: ${{ sequence.vet_shell.artifacts['vet-shell.log'] }}
+    vet-shell.json: ${{ sequence.vet_shell.artifacts['vet-shell.json'] }}
+    build.log: ${{ sequence.build.artifacts['build.log'] }}
+    build.json: ${{ sequence.build.artifacts['build.json'] }}
+    verification.md: ${{ sequence.aggregate.artifacts['verification.md'] }}
+    verification.json: ${{ sequence.aggregate.artifacts['verification.json'] }}
