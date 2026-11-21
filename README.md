@@ -1,3 +1,8 @@
+> [!WARNING]
+> **Superseded by [github.com/colony-2/pulse-macvz](https://github.com/colony-2/pulse-macvz)**
+> 
+> This repository is no longer maintained. Please use the new repository for ongoing updates and support.
+
 # pulse-tart
 
 A Go library and standalone server implementing [`pulse-provider-api`](https://github.com/colony-2/pulse-provider-api) through local Tart, Orchard, or a cgo-free native VZ provider. Default macOS and Linux slots support Docker when requested by a launch. macOS Docker uses an on-demand private Linux companion; Linux starts its local daemon only for Docker requests. Pulse imports the library and supplies complete job assignments. Use the typed Go API or the Cobra `pulse-tart setup`, `upgrade`, and `server` commands. The server defaults to outbound connections through the published provider plugin SDK; it also exposes the SDK’s inbound mode. See [server CLI setup and options](docs/server-cli.md), including the current upstream macOS inbound restriction.
